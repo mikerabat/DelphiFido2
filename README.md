@@ -11,7 +11,8 @@ To get the project running you need to download the Fido.dll from
 
 https://developers.yubico.com/libfido2/Releases/
 
-The current implementation is based on V1.2.0.
+The current implementation is based on V1.3.0. But please note that the
+biometrics api is not properly tested due to a lack of a such key here.
 
 Note the webauthn.pas is currently not used but already converted.
 
