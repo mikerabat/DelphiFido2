@@ -1086,7 +1086,9 @@ begin
                      finally
                             verify.Free;
                      end;
-                end;
+                end
+                else
+                    memLog.Lines.Add('err msg: ' + assert.ErrorMsg);
              finally
                     assert.Free;
              end;

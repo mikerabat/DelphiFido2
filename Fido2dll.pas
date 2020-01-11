@@ -13,14 +13,12 @@
 // ###################################################################
 
 
-// fido2 dll import file for fido2.dll V 1.2.0 and higher
+// fido2 dll import file for fido2.dll V 1.3.0 and higher
 // the file is basically a conversion of the imported header files of the fido2.dll
 // based on the sources in: https://github.com/Yubico/libfido2
 
 // check out: https://developers.yubico.com/libfido2/
 // for more information
-
-// no conversion of 1.3.0 yet!
 
 unit Fido2dll;
 
@@ -565,6 +563,9 @@ function fido_assert_set_up(assert : Pfido_assert_t; up : fido_opt_t) : integer;
 function fido_assert_set_uv(assert : Pfido_assert_t; uv : fido_opt_t) : integer; cdecl; external libFido;
 function fido_assert_set_sig(assert : Pfido_assert_t; idx : size_t; ptr : PByte; len : size_t) : integer; cdecl; external libFido;
 function fido_assert_verify(assert : Pfido_assert_t; idx : size_t; cose_alg : integer; pk : Pointer) : integer; cdecl; external libFido;
+function fido_assert_set_authdata_raw(assert : Pfido_assert_t; idx : size_t; ptr : PByte; len : size_t) : integer; cdecl; external libFido;
+function fido_assert_sigcount(assert : Pfido_assert_t; idx : size_t): UInt32; cdecl; external libFido;
+
 
 function fido_cred_exclude(cred : Pfido_cred_t;  ptr : PByte; len : size_t) : integer; cdecl; external libFido;
 function fido_cred_set_authdata(cred : Pfido_cred_t; ptr : PByte; len : size_t) : integer; cdecl; external libFido;
@@ -580,6 +581,7 @@ function fido_cred_set_uv(cred : Pfido_cred_t; uv : fido_opt_t) : integer; cdecl
 function fido_cred_type(cred : Pfido_cred_t) : integer; cdecl; external libFido;
 function fido_cred_set_user(cred : Pfido_cred_t; user_id : PByte; user_id_len : size_t; name : PAnsiChar; display_name : PAnsiChar; icon : PAnsiChar ) : integer; cdecl; external libFido;
 function fido_cred_set_x509(cred : Pfido_cred_t; ptr : PByte; len : size_t) : integer; cdecl; external libFido;
+function fido_cred_set_authdata_raw(cred : Pfido_cred_t; ptr : PByte; len : size_t) : integer; cdecl; external libFido;
 function fido_cred_verify(cred : Pfido_cred_t) : integer; cdecl; external libFido;
 
 function fido_dev_close(dev : Pfido_dev_t) : integer; cdecl; external libFido;
@@ -592,7 +594,7 @@ function fido_dev_open(dev : Pfido_dev_t; path : PAnsiChar) : integer; cdecl; ex
 function fido_dev_reset(dev : Pfido_dev_t) : integer; cdecl; external libFido;
 function fido_dev_set_io_functions(dev : Pfido_dev_t; io : Pfido_dev_io_t) : integer; cdecl; external libFido;
 function fido_dev_set_pin(dev : Pfido_dev_t; pin : PAnsiChar; oldPin : PAnsiChar) : integer; cdecl; external libFido;
-
+function fido_dev_cancel(dev : Pfido_dev_t) : integer; cdecl; external libFido;
 
 function fido_assert_authdata_len(assert : Pfido_assert_t; idx : size_t) : size_t; cdecl; external libFido;
 function fido_assert_clientdata_hash_len(assert : Pfido_assert_t) : size_t; cdecl; external libFido;
@@ -626,7 +628,90 @@ function fido_dev_info_product(di : Pfido_dev_info_t) : smallInt; cdecl; externa
 function fido_cbor_info_maxmsgsiz(ci : Pfido_cbor_info_t) : UInt64; cdecl; external libFido;
 
 function fido_dev_is_fido2(dev : Pfido_dev_t) : boolean; cdecl; external libFido;
-function fido_dev_cancel(dev : Pfido_dev_t) : integer; cdecl; external libFido;
+
+// ###########################################
+// #### from bio.h
+// ###########################################
+
+type
+  fido_bio_template_t = packed record
+    id : fido_blob_t;
+    name : PAnsiChar;
+  end;
+  Pfido_bio_template_t = ^fido_bio_template_t;
+
+  fido_bio_template_array = packed record
+     ptr : Pfido_bio_template_t;
+     n_alloc : size_t;          // number of allocated entries
+     n_rx : size_t;             // number of populated entries
+  end;
+  fido_bio_template_array_t = fido_bio_template_array;
+
+  fido_bio_enroll = packed record
+    remaining_samples : UInt8;
+    last_status : UInt8;
+    token : Pfido_blob_t;
+  end;
+  fido_bio_enroll_t = fido_bio_enroll;
+
+  fido_bio_info = packed record
+     typ : UInt8;
+     max_samples : UInt8;
+  end;
+  fido_bio_info_t = fido_bio_info;
+  Pfido_bio_info_t = ^fido_bio_info_t;
+
+  Pfido_bio_template_array_t = pointer;
+  Pfido_bio_enroll_t = Pointer;
+
+
+const FIDO_BIO_ENROLL_FP_GOOD				 = $00;
+      FIDO_BIO_ENROLL_FP_TOO_HIGH			 = $01;
+      FIDO_BIO_ENROLL_FP_TOO_LOW			 = $02;
+      FIDO_BIO_ENROLL_FP_TOO_LEFT			 = $03;
+      FIDO_BIO_ENROLL_FP_TOO_RIGHT			 = $04;
+      FIDO_BIO_ENROLL_FP_TOO_FAST			 = $05;
+      FIDO_BIO_ENROLL_FP_TOO_SLOW			 = $06;
+      FIDO_BIO_ENROLL_FP_POOR_QUALITY			 = $07;
+      FIDO_BIO_ENROLL_FP_TOO_SKEWED			 = $08;
+      FIDO_BIO_ENROLL_FP_TOO_SHORT			 = $09;
+      FIDO_BIO_ENROLL_FP_MERGE_FAILURE		 = $0a;
+      FIDO_BIO_ENROLL_FP_EXISTS			 = $0b;
+      FIDO_BIO_ENROLL_FP_DATABASE_FULL		 = $0c;
+      FIDO_BIO_ENROLL_NO_USER_ACTIVITY		 = $0d;
+      FIDO_BIO_ENROLL_NO_USER_PRESENCE_TRANSITION	 = $0e;
+
+function fido_bio_template_name(template : Pfido_bio_template_t) : PAnsiChar; cdecl; external libFido;
+function fido_bio_template(templateArray : Pfido_bio_template_array_t; idx : size_t ): Pfido_bio_template_t; cdecl; external libFido;
+function fido_bio_template_id_ptr(template : Pfido_bio_template_t) : PByte; cdecl; external libFido;
+function fido_bio_enroll_new : Pfido_bio_enroll_t; cdecl; external libFido;
+function fido_bio_info_new : Pfido_bio_info_t; cdecl; external libFido;
+function fido_bio_template_array_new : Pfido_bio_template_array_t; cdecl; external libFido;
+function fido_bio_template_new : Pfido_bio_template_t; cdecl; external libFido;
+function fido_bio_dev_enroll_begin(dev : Pfido_dev_t; template : Pfido_bio_template_t;
+    endroll : Pfido_bio_enroll_t; timeout : UInt32; pin : PAnsiChar) : integer;  cdecl; external libFido;
+function fido_bio_dev_enroll_cancel(dev : Pfido_dev_t) : integer;  cdecl; external libFido;
+function fido_bio_dev_enroll_continue(dev : Pfido_dev_t; template : Pfido_bio_template_t;
+    enroll : Pfido_bio_enroll_t; timeout : uint32) : integer;  cdecl; external libFido;
+function fido_bio_dev_enroll_remove(dev : Pfido_dev_t; template : Pfido_bio_template_t;
+    pin : PAnsiChar) : integer;  cdecl; external libFido;
+function fido_bio_dev_get_info(dev : Pfido_dev_t; info : Pfido_bio_info_t) : integer;  cdecl; external libFido;
+function fido_bio_dev_get_template_array(dev : Pfido_dev_t; templateArray : Pfido_bio_template_array_t;
+    pin : PAnsiChar) : integer;  cdecl; external libFido;
+function fido_bio_dev_set_template_name(dev : Pfido_dev_t; template : Pfido_bio_template_t;
+    pin : PAnsiChar) : integer;  cdecl; external libFido;
+function fido_bio_template_set_id(template : Pfido_bio_template_t; ptr : PByte; len : size_t) : integer;  cdecl; external libFido;
+function fido_bio_template_set_name(template : Pfido_bio_template_t; name : PAnsiChar) : integer;  cdecl; external libFido;
+function fido_bio_template_array_count(template_array : Pfido_bio_template_array_t) : size_t;  cdecl; external libFido;
+function fido_bio_template_id_len(template : Pfido_bio_template_t) : size_t;  cdecl; external libFido;
+function fido_bio_enroll_last_status(enroll : Pfido_bio_enroll_t) : byte;  cdecl; external libFido;
+function fido_bio_enroll_remaining_samples(enroll : Pfido_bio_enroll_t) : byte;  cdecl; external libFido;
+function fido_bio_info_max_samples(info : Pfido_bio_info_t) : Byte;  cdecl; external libFido;
+function fido_bio_info_type(info : Pfido_bio_info_t) : Byte;  cdecl; external libFido;
+procedure fido_bio_enroll_free(var  enroll : Pfido_bio_enroll_t);  cdecl; external libFido;
+procedure fido_bio_info_free(var info : Pfido_bio_info_t);  cdecl; external libFido;
+procedure fido_bio_template_array_free(var template_array : Pfido_bio_template_array_t);  cdecl; external libFido;
+procedure fido_bio_template_free(var template : Pfido_bio_template_t);  cdecl; external libFido;
 
 
 

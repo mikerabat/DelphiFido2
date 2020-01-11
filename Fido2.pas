@@ -32,8 +32,9 @@ type
   end;
 
 type
-  TFidoChallange = Array[0..31] of byte;    // from https://fidoalliance.org/specs/fido-v2.0-rd-20170927/fido-client-to-authenticator-protocol-v2.0-rd-20170927.html
-  //TFidoRPIDHash = Array[0..31] of byte;
+  TFidoChallenge = Array[0..31] of byte;    // from https://fidoalliance.org/specs/fido-v2.0-rd-20170927/fido-client-to-authenticator-protocol-v2.0-rd-20170927.html
+  TFidoUserId = Array[0..31] of byte; // here used as the same type as the challange
+  TFidoRPIDHash = Array[0..31] of byte;
 
 // ###################################################
 // #### Encapsulation of the fido_cbor_xxx functions
@@ -143,9 +144,91 @@ type
     // attaching the key.
     procedure Reset;
 
+    // cancels the latest device operation (waiting for user interaction)
+    procedure Cancel;
+
     // constructors
     constructor CreateFromPath( usbPath : String );
     constructor CreateFromDevInfo( di : Pfido_dev_info_t );
+
+    destructor Destroy; override;
+  end;
+
+type
+  TFidoBiometricTemplate = class(TObject)
+  private
+    fTemplate : Pfido_bio_template_t;
+    fOwnsTemplate : boolean;
+    function GetID: TBytes;
+    function GetString: string;
+    procedure SetId(const Value: TBytes);
+    procedure SetString(const Value: string);
+  public
+    property Name : string read GetString write SetString;
+    property ID : TBytes read GetID write SetId;
+
+    constructor Create;
+    constructor CreateByRef( tpl : Pfido_bio_template_t );
+    destructor Destroy; override;
+  end;
+  TFidoBiometricTemplateArr = TObjectList<TFidoBiometricTemplate>;
+
+type
+  TFidoBiometricDevice = class;
+  TFidoBiometricTplArray = class(TObject)
+  private
+    fArrObj : TFidoBiometricTemplateArr;
+    fTplArr : Pfido_bio_template_array_t;
+
+    procedure Clear;
+    procedure Init;
+    function GetCount: integer;
+    function GetItem(index: integer): TFidoBiometricTemplate;
+  public
+    property Count : integer read GetCount;
+    property Items[ index : integer ] : TFidoBiometricTemplate read GetItem;
+
+    procedure InitFromDev( dev : TFidoBiometricDevice; pin : string );
+
+    constructor Create;
+    destructor Destroy; override;
+  end;
+
+  TFidoBiometricEnroll = class(TObject)
+  private
+    fEnroll : Pfido_bio_enroll_t;
+  public
+    function LastStatus : byte;
+    function RemainingSamples : byte;
+
+    constructor Create;
+    destructor Destroy; override;
+  end;
+
+  TFidoBiometricInfo = class(TObject)
+  private
+    fInfo : Pfido_bio_info_t;
+  public
+    function MaxSamples : byte;
+    function DevType : byte;
+
+    constructor Create;
+    destructor Destroy; override;
+  end;
+
+  TFidoBiometricDevice = class(TFidoDevice)
+  private
+    fEnroll : TFidoBiometricEnroll;
+    fInfo : TFidoBiometricInfo;
+  public
+    function TemplateArr( pin : string ) : TFidoBiometricTplArray;
+
+    function GetInfo : TFidoBiometricInfo;
+
+    function EnrollBegin(pin : string; template : TFidoBiometricTemplate; timeout : UInt32) : TFidoBiometricEnroll;
+    procedure EnrollContinue( template : TFidoBiometricTemplate; timeout : UInt32 );
+    procedure EnrollCancel;
+    procedure EnrollRemove( template : TFidoBiometricTemplate; pin : string );
 
     destructor Destroy; override;
   end;
@@ -164,7 +247,7 @@ type
 
     fRelyingParty : string;
     fRelyingPartyName : string;
-    fClientHash : TFidoChallange;      // challange
+    fChallange : TFidoChallenge;      // challange
     fEnableHMACSecret : boolean;
     fResidentKey : fido_opt_t;         // create a resident key on the device
     fUserIdentification : fido_opt_t;  //
@@ -193,6 +276,7 @@ type
     procedure SetUserIdent(const Value: fido_opt_t);
     procedure SetUserName(const Value: string);
     procedure SetFmt(const Value: TFidoCredentialFmt);
+    procedure SetChallange( cid : TFidoChallenge );
   public
     property CredentialType : TFidoCredentialType read fCredType write SetCredType;
     property RelyingPartyName : string read fRelyingPartyName write SetRelPartyName;
@@ -203,10 +287,10 @@ type
     property UserName : string read fUserName write SetUserName;
     property UserDisplayName : string read fDisplaNamy write SetDisplayName;
     property Fmt : TFidoCredentialFmt read fFmt write SetFmt;
+    property Challange : TFidoChallenge read fChallange write SetChallange;
 
     procedure CreateRandomUid( len : integer );
     procedure SetUserId( uid : TBytes );
-    procedure SetClientHash( cid : TFidoChallange );
 
     procedure SavePKToStream( stream : TStream );
     procedure SavePKToFile( fn : String );
@@ -237,7 +321,7 @@ type
   protected
     procedure UpdateCredentials; override;
   public
-    function Verify( ClientData : TFidoChallange ) : boolean;
+    function Verify( ClientData : TFidoChallenge ) : boolean;
 
     // copies the verification data from already generated credentials (e.g. CreateCredentials)
     constructor Create( fromCred : TBaseFido2Credentials); overload;
@@ -257,14 +341,13 @@ type
     fAssertType : TFidoCredentialType;
 
     fRelyingParty : string;
-    fClientHash : TFidoChallange;              // challange
+    fClientHash : TFidoChallenge;              // challange
     fEnableHMACSecret : boolean;
     fUserPresence : fido_opt_t;         // create a resident key on the device
     fUserVerification : fido_opt_t;  //
 
     // user identification
     fFmt : TFidoCredentialFmt;
-    fUserIdentification: fido_opt_t;
 
     procedure PrepareAssert;
     procedure SetAssertType(const Value: TFidoCredentialType); virtual;
@@ -282,10 +365,10 @@ type
     property AssertType : TFidoCredentialType read fAssertType write SetAssertType;
     property RelyingParty : string read fRelyingParty write SetRelParty;
     property HMACSecretEnabled : boolean read fEnableHMACSecret write SetHMACSecret;
-    property UserVerification : fido_opt_t read fUserIdentification write SetUserIdent;
+    property UserVerification : fido_opt_t read fUserVerification write SetUserIdent;
     property Fmt : TFidoCredentialFmt read fFmt write SetFmt;
     property UserPresence : fido_opt_t read fUserPresence write SetUserPresence;
-    property Challange : TFidoChallange read fClientHash write fClientHash;
+    property Challange : TFidoChallenge read fClientHash write fClientHash;
 
     procedure CreateRandomCID;
 
@@ -602,6 +685,13 @@ begin
      CloseDevice;
 end;
 
+procedure TFidoDevice.Cancel;
+begin
+     assert( Assigned( fDev ), 'Error no device opened');
+
+     CR( fido_dev_cancel( fDev ) );
+end;
+
 procedure TFidoDevice.CloseDevice;
 begin
      if Assigned(fDev) then
@@ -765,7 +855,7 @@ begin
      fEnableHMACSecret := False;
 
      // init initial userid and client challange data blocks
-     RandomInit( fClientHash, sizeof(fClientHash) );
+     RandomInit( fChallange, sizeof(fChallange) );
      fCredType := ctCOSEES256;
 
      fResidentKey := FIDO_OPT_OMIT;
@@ -784,8 +874,8 @@ begin
 
      // type
      CR(fido_cred_set_type( fcred, Integer( fcredType ) ) );
-     if Length(fClientHash) > 0 then
-        CR(fido_cred_set_clientdata_hash( fcred, @fClientHash[0], Length(fClientHash)));
+     if Length(fChallange) > 0 then
+        CR(fido_cred_set_clientdata_hash( fcred, @fChallange[0], Length(fChallange)));
 
      // relying party
      CR(fido_cred_set_rp(fcred, PAnsiChar( UTF8String( fRelyingParty ) ),
@@ -895,9 +985,9 @@ begin
      UpdateCredentials;
 end;
 
-procedure TBaseFido2Credentials.SetClientHash(cid: TFidoChallange);
+procedure TBaseFido2Credentials.SetChallange(cid: TFidoChallenge);
 begin
-     fClientHash := cid;
+     fChallange := cid;
      UpdateCredentials;
 end;
 
@@ -993,7 +1083,7 @@ begin
         CR( fido_cred_set_sig( fcred, @fSig[0], Length(fSig) ) );
 end;
 
-function TFidoCredVerify.Verify(ClientData: TFidoChallange): boolean;
+function TFidoCredVerify.Verify(ClientData: TFidoChallenge): boolean;
 var r : integer;
 begin
      if Length(fAuthData) = 0 then
@@ -1003,7 +1093,7 @@ begin
      if Length(fSig) = 0 then
         raise EFidoPropertyException.Create('sig missing');
 
-     fClientHash := ClientData;
+     fChallange := ClientData;
      PrepareCredentials;
 
      // ###########################################
@@ -1127,7 +1217,7 @@ begin
      begin
           credVerify := TFidoCredVerify.Create(self);
           try
-             Result := credVerify.Verify(fClientHash);
+             Result := credVerify.Verify(fChallange);
           finally
                  credVerify.Free;
           end;
@@ -1241,7 +1331,7 @@ end;
 
 procedure TBaseFidoAssert.SetUserIdent(const Value: fido_opt_t);
 begin
-     fUserIdentification := Value;
+     fUserVerification := Value;
      UpdateAssert;
 end;
 
@@ -1738,6 +1828,269 @@ begin
      finally
             fs.Free;
      end;
+end;
+
+// ########################################################
+// ####
+// ########################################################
+
+{ TFidoBiometricTemplate }
+
+// ########################################################
+// #### Biometric template
+// ########################################################
+
+function TFidoBiometricTemplate.GetID: TBytes;
+begin
+     Result := ptrToByteArr( fido_bio_template_id_ptr( fTemplate ), fido_bio_template_id_len( fTemplate ) );
+end;
+
+function TFidoBiometricTemplate.GetString: string;
+begin
+     Result := String( fido_bio_template_name( fTemplate ) );
+end;
+
+procedure TFidoBiometricTemplate.SetId(const Value: TBytes);
+var pB : PByte;
+begin
+     pB := nil;
+     if Length(Value) > 0 then
+        pb := @Value[0];
+
+     CR( fido_bio_template_set_id( fTemplate, pb, Length(Value) ) );
+end;
+
+procedure TFidoBiometricTemplate.SetString(const Value: string);
+begin
+     CR( fido_bio_template_set_name( fTemplate, PAnsiChar( UTF8String( Value ) ) ) );
+end;
+
+constructor TFidoBiometricTemplate.Create;
+begin
+     fTemplate := fido_bio_template_new;
+     fOwnsTemplate := True;
+
+     if not Assigned(fTemplate) then
+        raise EFidoAllocException.Create('Error allocating template');
+
+     inherited;
+end;
+
+constructor TFidoBiometricTemplate.CreateByRef(tpl: Pfido_bio_template_t);
+begin
+     fTemplate := tpl;
+     fOwnsTemplate := False;
+
+     if not Assigned(fTemplate) then
+        raise EFidoAllocException.Create('No Template Assigned');
+
+     inherited Create;
+end;
+
+destructor TFidoBiometricTemplate.Destroy;
+begin
+     if fOwnsTemplate then
+        fido_bio_template_free(fTemplate);
+
+     inherited;
+end;
+
+{ TFidoBiometricTplArray }
+
+function TFidoBiometricTplArray.GetCount: integer;
+begin
+     Result := fArrObj.Count;
+end;
+
+function TFidoBiometricTplArray.GetItem(index: integer): TFidoBiometricTemplate;
+begin
+     assert( index < fArrObj.Count, 'Index out of bounds');
+     Result := fArrObj[index];
+end;
+
+constructor TFidoBiometricTplArray.Create;
+begin
+     inherited Create;
+
+     Init;
+end;
+
+procedure TFidoBiometricTplArray.Clear;
+begin
+     if Assigned(fArrObj) then
+     begin
+          FreeAndNil(fArrObj);
+          fido_bio_template_array_free(fTplArr);
+          fTplArr := nil;
+     end;
+end;
+
+procedure TFidoBiometricTplArray.Init;
+begin
+     if not Assigned(fArrObj) then
+     begin
+          fArrObj := TFidoBiometricTemplateArr.Create;
+
+          fTplArr := fido_bio_template_array_new;
+          if not Assigned(fTplArr) then
+             raise EFidoAllocException.Create('Error could not allocate template array');
+     end;
+end;
+
+procedure TFidoBiometricTplArray.InitFromDev(dev: TFidoBiometricDevice;
+  pin: string);
+var pPin : PAnsiChar;
+    cnt : integer;
+begin
+     Clear;
+     Init;
+
+     pPin := nil;
+     if pin <> '' then
+        pPin := PAnsiChar( UTF8String( pin ) );
+     CR( fido_bio_dev_get_template_array(dev.fDev, fTplArr, pPin) );
+
+     for cnt := 0 to fido_bio_template_array_count( fTplArr ) - 1 do
+         fArrObj.Add( TFidoBiometricTemplate.CreateByRef( fido_bio_template( fTplArr, cnt ) ) );
+end;
+
+destructor TFidoBiometricTplArray.Destroy;
+begin
+     Clear;
+
+     inherited;
+end;
+
+{ TFidoBiometricEnroll }
+
+constructor TFidoBiometricEnroll.Create;
+begin
+     inherited Create;
+
+     fEnroll := fido_bio_enroll_new;
+     if not Assigned(fEnroll) then
+        raise EFidoAllocException.Create('Error could not allocate enroll');
+end;
+
+destructor TFidoBiometricEnroll.Destroy;
+begin
+     if Assigned(fEnroll) then
+        fido_bio_enroll_free(fEnroll);
+
+     inherited;
+end;
+
+function TFidoBiometricEnroll.LastStatus: byte;
+begin
+     Result := fido_bio_enroll_last_status( fEnroll );
+end;
+
+function TFidoBiometricEnroll.RemainingSamples: byte;
+begin
+     Result := fido_bio_enroll_remaining_samples( fEnroll );
+end;
+
+{ TFidoBiometricDevice }
+
+function TFidoBiometricDevice.TemplateArr( pin : string ): TFidoBiometricTplArray;
+begin
+     Result := TFidoBiometricTplArray.Create;
+     Result.InitFromDev( self, pin );
+end;
+
+function TFidoBiometricDevice.EnrollBegin(pin: string;
+  template: TFidoBiometricTemplate; timeout : UInt32): TFidoBiometricEnroll;
+var pPin : PAnsiChar;
+begin
+     pPin := nil;
+     if Length(pin) > 0 then
+        pPin := PAnsiChar(UTF8String( pin ));
+     fEnroll := TFidoBiometricEnroll.Create;
+
+     CR( fido_bio_dev_enroll_begin( fDev, template.fTemplate, fEnroll.fEnroll, timeout, pPin) );
+
+     Result := fEnroll;
+end;
+
+procedure TFidoBiometricDevice.EnrollContinue(template: TFidoBiometricTemplate;
+  timeout: UInt32);
+begin
+     if not Assigned(fEnroll) then
+        raise EFidoBaseException.Create('Error - call EnrollBegin first');
+
+     CR( fido_bio_dev_enroll_continue(fDev, template.fTemplate, fEnroll, timeout) );
+end;
+
+procedure TFidoBiometricDevice.EnrollCancel;
+begin
+     if not Assigned(fEnroll) then
+        raise EFidoBaseException.Create('Error - call EnrollBegin first');
+
+     CR( fido_bio_dev_enroll_cancel( fDev ) );
+
+     FreeAndNil(fEnroll);
+end;
+
+procedure TFidoBiometricDevice.EnrollRemove(template: TFidoBiometricTemplate;
+  pin: string);
+var pPin : PAnsiChar;
+begin
+     if not Assigned(fEnroll) then
+        raise EFidoBaseException.Create('Error - call EnrollBegin first');
+
+     pPin := nil;
+     if Length(pin) > 0 then
+        pPin := PAnsiChar(UTF8String( pin ));
+
+     Cr( fido_bio_dev_enroll_remove( fDev, template.fTemplate, pPin) );
+end;
+
+destructor TFidoBiometricDevice.Destroy;
+begin
+     fEnroll.Free;
+     fInfo.Free;
+
+     inherited;
+end;
+
+function TFidoBiometricDevice.GetInfo: TFidoBiometricInfo;
+begin
+     if not Assigned(fInfo) then
+     begin
+          fInfo := TFidoBiometricInfo.Create;
+          CR( fido_bio_dev_get_info( fDev, fInfo.fInfo ) );
+     end;
+
+     Result := fInfo;
+end;
+
+{ TFidoBiometricInfo }
+
+constructor TFidoBiometricInfo.Create;
+begin
+     inherited Create;
+
+     fInfo := fido_bio_info_new;
+     if not Assigned(fInfo) then
+        EFidoAllocException.Create('Error could not allocate bio info object');
+end;
+
+destructor TFidoBiometricInfo.Destroy;
+begin
+     if Assigned( fInfo ) then
+        fido_bio_info_free(fInfo);
+
+     inherited;
+end;
+
+function TFidoBiometricInfo.MaxSamples: byte;
+begin
+     Result := fido_bio_info_max_samples( fInfo );
+end;
+
+function TFidoBiometricInfo.DevType: byte;
+begin
+     Result := fido_bio_info_type( fInfo );
 end;
 
 end.

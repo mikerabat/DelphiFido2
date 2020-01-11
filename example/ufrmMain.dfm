@@ -3,7 +3,7 @@ object frmFido2: TfrmFido2
   Top = 0
   Caption = 'FIDO 2'
   ClientHeight = 335
-  ClientWidth = 625
+  ClientWidth = 580
   Color = clBtnFace
   Font.Charset = DEFAULT_CHARSET
   Font.Color = clWindowText
