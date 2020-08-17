@@ -96,7 +96,9 @@ type
      pwszIcon : PCWSTR;
   end;
   WEBAUTHN_RP_ENTITY_INFORMATION = _WEBAUTHN_RP_ENTITY_INFORMATION;
-  PWEBAUTHN_RP_ENTITY_INFORMATION = ^WEBAUTHN_RP_ENTITY_INFORMATION;
+  TWebAuthnRPEntityInformation = WEBAUTHN_RP_ENTITY_INFORMATION;
+  PWebAuthnRPEntityInformation = ^TWebAuthnRPEntityInformation;
+
 
 // typedef const WEBAUTHN_RP_ENTITY_INFORMATION *PCWEBAUTHN_RP_ENTITY_INFORMATION;
 
@@ -128,8 +130,9 @@ type
     pwszDisplayName : PCWSTR;
   end;
   WEBAUTHN_USER_ENTITY_INFORMATION = _WEBAUTHN_USER_ENTITY_INFORMATION;
-  PWEBAUTHN_USER_ENTITY_INFORMATION = ^WEBAUTHN_USER_ENTITY_INFORMATION;
-  PCWEBAUTHN_USER_ENTITY_INFORMATION = PWEBAUTHN_USER_ENTITY_INFORMATION;
+  TWebAuthUserEntityInformation = WEBAUTHN_USER_ENTITY_INFORMATION;
+  PWebAuthUserEntityInformation = ^TWebAuthUserEntityInformation;
+  PCWebAuthUserEntityInformation = PWebAuthUserEntityInformation;
 //typedef const WEBAUTHN_USER_ENTITY_INFORMATION *PCWEBAUTHN_USER_ENTITY_INFORMATION;
 
 //+------------------------------------------------------------------------------------------
@@ -152,14 +155,15 @@ type
     cbClientDataJSON : DWORD;
     // UTF-8 encoded JSON serialization of the client data.
     // _Field_size_bytes_(cbClientDataJSON)
-    pbClientDataJSON : PBYTE;
+    pbClientDataJSON : PAnsiChar;
 
     // Hash algorithm ID used to hash the pbClientDataJSON field.
     pwszHashAlgId : LPCWSTR;
   end;
   WEBAUTHN_CLIENT_DATA = _WEBAUTHN_CLIENT_DATA;
-  PWEBAUTHN_CLIENT_DATA = ^WEBAUTHN_CLIENT_DATA;
-  PCWEBAUTHN_CLIENT_DATA = PWEBAUTHN_CLIENT_DATA;
+  TWebAuthnClientData = WEBAUTHN_CLIENT_DATA;
+  PWebAuthnClientData = ^TWebAuthnClientData;
+  PCWebAuthnClientData = PWebAuthnClientData;
 //typedef const WEBAUTHN_CLIENT_DATA *PCWEBAUTHN_CLIENT_DATA;
 
 //+------------------------------------------------------------------------------------------
@@ -203,6 +207,7 @@ type
     pCredentialParameters : PWEBAUTHN_COSE_CREDENTIAL_PARAMETER;
   end;
   WEBAUTHN_COSE_CREDENTIAL_PARAMETERS = _WEBAUTHN_COSE_CREDENTIAL_PARAMETERS;
+  TWebauthnCoseCredentialParameters = WEBAUTHN_COSE_CREDENTIAL_PARAMETERS;
   PWEBAUTHN_COSE_CREDENTIAL_PARAMETERS = ^WEBAUTHN_COSE_CREDENTIAL_PARAMETERS;
   PCWEBAUTHN_COSE_CREDENTIAL_PARAMETERS = PWEBAUTHN_COSE_CREDENTIAL_PARAMETERS;
 
@@ -228,7 +233,7 @@ type
   WEBAUTHN_CREDENTIAL = _WEBAUTHN_CREDENTIAL;
   PWEBAUTHN_CREDENTIAL = ^WEBAUTHN_CREDENTIAL;
 
-type 
+type
   _WEBAUTHN_CREDENTIALS = packed record
     cCredentials : DWORD;
 //    _Field_size_(cCredentials)
@@ -250,7 +255,7 @@ const WEBAUTHN_CTAP_TRANSPORT_USB = $00000001;
 
       WEBAUTHN_CREDENTIAL_EX_CURRENT_VERSION = 1;
 
-type 
+type
   _WEBAUTHN_CREDENTIAL_EX = packed record
     // Version of this structure, to allow for modifications in the future.
     dwVersion : DWORD;
@@ -335,8 +340,8 @@ const WEBAUTHN_EXTENSIONS_IDENTIFIER_CRED_PROTECT = 'credProtect';
 //+------------------------------------------------------------------------------------------
 // Information about Extensions.
 //-------------------------------------------------------------------------------------------
-type 
-  _WEBAUTHN_EXTENSION = packed record 
+type
+  _WEBAUTHN_EXTENSION = packed record
     pwszExtensionIdentifier : LPCWSTR;
     cbExtension : DWORD;
     pvExtension : Pointer;
@@ -420,9 +425,11 @@ type
     // Exclude Credential List. If present, "CredentialList" will be ignored.
     pExcludeCredentialList : PWEBAUTHN_CREDENTIAL_LIST;
   end;
+
   WEBAUTHN_AUTHENTICATOR_MAKE_CREDENTIAL_OPTIONS = _WEBAUTHN_AUTHENTICATOR_MAKE_CREDENTIAL_OPTIONS;
   PWEBAUTHN_AUTHENTICATOR_MAKE_CREDENTIAL_OPTIONS = ^WEBAUTHN_AUTHENTICATOR_MAKE_CREDENTIAL_OPTIONS;
   PCWEBAUTHN_AUTHENTICATOR_MAKE_CREDENTIAL_OPTIONS = PWEBAUTHN_AUTHENTICATOR_MAKE_CREDENTIAL_OPTIONS;
+  TWebAuthnAuthenticatorMakeCredentialOptions = WEBAUTHN_AUTHENTICATOR_MAKE_CREDENTIAL_OPTIONS;
 
 const WEBAUTHN_AUTHENTICATOR_GET_ASSERTION_OPTIONS_VERSION_1 = 1;
       WEBAUTHN_AUTHENTICATOR_GET_ASSERTION_OPTIONS_VERSION_2 = 2;
@@ -663,19 +670,19 @@ type
 function WebAuthNGetApiVersionNumber : DWORD; stdcall; external cWebAuthLibName;
 function WebAuthNIsUserVerifyingPlatformAuthenticatorAvailable( var pbIsUserVerifyingPlatformAuthenticatorAvailable : BOOL ) : HRESULT; stdcall; external cWebAuthLibName;
 function WebAuthNAuthenticatorMakeCredential( hWnd : HWND;  // _In_
-                                              pRpInformation : PWEBAUTHN_RP_ENTITY_INFORMATION; // _In_
-                                              pUserInformation : PCWEBAUTHN_USER_ENTITY_INFORMATION; // _In_
+                                              pRpInformation : PWebAuthnRPEntityInformation; // _In_
+                                              pUserInformation : PCWebAuthUserEntityInformation; // _In_
                                               pPubKeyCredParams : PCWEBAUTHN_COSE_CREDENTIAL_PARAMETERS; // _In_
-                                              pWebAuthNClientData : PCWEBAUTHN_CLIENT_DATA; // _In_
+                                              pWebAuthNClientData : PCWebAuthnClientData; // _In_
                                               pWebAuthNMakeCredentialOptions : PCWEBAUTHN_AUTHENTICATOR_MAKE_CREDENTIAL_OPTIONS; // _In_opt_
-                                              ppWebAuthNCredentialAttestation : PPWEBAUTHN_CREDENTIAL_ATTESTATION // _Outptr_result_maybenull_
-                                              ) : HRESULT; stdcall; external cWebAuthLibName; 
+                                              var pWebAuthNCredentialAttestation : PWEBAUTHN_CREDENTIAL_ATTESTATION // _Outptr_result_maybenull_
+                                              ) : HRESULT; stdcall; external cWebAuthLibName;
 
 function WebAuthNAuthenticatorGetAssertion( hWnd : HWND; // _IN_
                                             pwszRpId : LPCWSTR; // _In_
-                                            pWebAuthNClientData : PCWEBAUTHN_CLIENT_DATA; // _In_
+                                            pWebAuthNClientData : PCWebAuthnClientData; // _In_
                                             pWebAuthNGetAssertionOptions : PCWEBAUTHN_AUTHENTICATOR_GET_ASSERTION_OPTIONS; // _In_opt_    
-                                            ppWebAuthNAssertion : PPWEBAUTHN_ASSERTION // _Outptr_result_maybenull_
+                                            var pWebAuthNAssertion : PWEBAUTHN_ASSERTION // _Outptr_result_maybenull_
                                             ) : HRESULT; stdcall; external cWebAuthLibName; 
 
 procedure WebAuthNFreeCredentialAttestation(
