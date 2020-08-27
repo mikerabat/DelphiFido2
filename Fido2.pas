@@ -36,6 +36,8 @@ type
   TFidoUserId = Array[0..31] of byte; // here used as the same type as the challange
   TFidoRPIDHash = Array[0..31] of byte;
 
+  TFidoLogMsg = procedure(msg : string) of Object;
+
 // ###################################################
 // #### Encapsulation of the fido_cbor_xxx functions
 // ###################################################
@@ -450,6 +452,7 @@ type
     fx509 : TBytes;
     fSig : TBytes;
     fCredId : TBytes;
+    // fCredGuid : TBytes;
   public
     constructor Create( cred : Pfido_cred_t );
   end;
@@ -498,9 +501,32 @@ type
     destructor Destroy; override;
   end;
 
+
+// to get results from the logger initialize the Fido with the debug flag
+// -> fido_init(cFidoInitDebug);
+procedure InitFidoLogger( OnLog : TFidoLogMsg );
+
 implementation
 
 //uses Setupapi, Windows;
+
+// ###########################################
+// #### Fido logging
+// ###########################################
+
+var loc_fidoLog : TFidoLogMsg;
+
+procedure FidoLog(msg : PAnsiChar); cdecl;
+begin
+     if Assigned(loc_fidoLog) then
+        loc_fidoLog( String( UTF8String( msg ) ) );
+end;
+
+procedure InitFidoLogger( OnLog : TFidoLogMsg );
+begin
+     loc_fidoLog := OnLog;
+     fido_set_log_handler(FidoLog);
+end;
 
 // #########################################################
 // #### helper functions
@@ -1776,6 +1802,7 @@ begin
      fCredId := ptrToByteArr( fido_cred_id_ptr( cred ), fido_cred_id_len( cred ) );
      fSig := ptrToByteArr( fido_cred_sig_ptr( cred ), fido_cred_sig_len( cred ) );
      fx509 := ptrToByteArr( fido_cred_x5c_ptr( cred ), fido_cred_x5c_len( cred ) );
+     // fCredGuid := ptrToByteArr( fido_cred_aaguid_ptr( cred ), fido_cred_aaguid_len( cred ) );
 end;
 
 function TFidoDevice.GetFirmware: string;

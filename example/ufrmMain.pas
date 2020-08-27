@@ -70,6 +70,7 @@ type
     procedure VerifyAssert(typ : integer; authdata_ptr : PByte; authdata_len : integer;
                            sig_ptr : PByte; sig_len : integer;
                            ext : integer);
+    procedure onFidoDLLLog(msg : string);
   public
     { Public-Deklarationen }
   end;
@@ -132,7 +133,14 @@ procedure TfrmFido2.FormCreate(Sender: TObject);
 begin
      fUserPresence := True;
      fUserVerification := True;
-     fido_init(0);
+     fido_init(cFidoInitDebug);
+
+     InitFidoLogger( onFidoDLLLog );
+end;
+
+procedure TfrmFido2.onFidoDLLLog(msg: string);
+begin
+     memLog.Lines.Add('FidoDll: ' + msg);
 end;
 
 procedure TfrmFido2.VerifyCredentials(typ: integer; fmt: PAnsiChar;
