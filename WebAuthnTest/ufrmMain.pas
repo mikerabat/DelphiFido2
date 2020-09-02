@@ -66,12 +66,12 @@ var webauthJSON : ISuperObject;
     i: Integer;
     clientData : UTF8String;
 begin
-     if not FileExists('D:\Webauth.json') then
+     if not FileExists('webauth.json') then
         raise Exception.Create('Cannot find original credential file');
 
      with TStringLIst.Create do
      try
-        LoadFromFile('D:\webauth.json');
+        LoadFromFile('webauth.json');
         webauthJSON := SO(Text);
      finally
             Free;
@@ -147,7 +147,7 @@ var webauthJSON : ISuperObject;
 begin
      with TStringLIst.Create do
      try
-        LoadFromFile('D:\webauth.json');
+        LoadFromFile('webauth.json');
         webauthJSON := SO(Text);
      finally
             Free;
@@ -183,7 +183,7 @@ begin
      jsonout.S['rawId'] := Base64URLEncode( pAssert^.Credential.pbId, pAssert^.Credential.cbId );
      jsonout.S['type'] := pAssert^.Credential.pwszCredentialType;
 
-     jsonout.SaveTo('D:\webauthn_assert.json');
+     jsonout.SaveTo('webauthn_assert.json');
 
      memLog.Lines.Add('');
      memLog.Lines.Add('Assertion json: ' );
@@ -215,7 +215,7 @@ begin
      jsonout.S['debug.authData'] := Base64URLEncode( pCred^.pbAuthenticatorData, pCred^.cbAuthenticatorData );
      jsonout.S['debug.attestation'] := Base64URLEncode( pCred^.pbAttestation, pCred^.cbAttestation );
 
-     jsonout.SaveTo('D:\webauth.json');
+     jsonout.SaveTo('webauth.json');
 end;
 
 procedure TfrmWebAuthnTest.btnUserVerifyAvailClick(Sender: TObject);
@@ -269,9 +269,9 @@ begin
      end;
 
      UserInformation.pbId := @uid[0];
-     UserInformation.pwszName := 'Mike';
+     UserInformation.pwszName := 'test';
      UserInformation.pwszIcon := niL;
-     UserInformation.pwszDisplayName := 'Mike Rabat';
+     UserInformation.pwszDisplayName := 'Test display name';
 
      // ################################################
      // #### Client data
@@ -300,7 +300,7 @@ begin
      FillChar(WebAuthNMakeCredentialOptions, sizeof(WebAuthNMakeCredentialOptions), 0);
      WebAuthNMakeCredentialOptions.dwVersion := WEBAUTHN_AUTHENTICATOR_MAKE_CREDENTIAL_OPTIONS_CURRENT_VERSION;
      WebAuthNMakeCredentialOptions.dwTimeoutMilliseconds := 20000;
-     WebAuthNMakeCredentialOptions.bRequireResidentKey := True;
+     WebAuthNMakeCredentialOptions.bRequireResidentKey := False;
      WebAuthNMakeCredentialOptions.dwAuthenticatorAttachment := WEBAUTHN_AUTHENTICATOR_ATTACHMENT_CROSS_PLATFORM;
      WebAuthNMakeCredentialOptions.dwUserVerificationRequirement := WEBAUTHN_USER_VERIFICATION_REQUIREMENT_REQUIRED;
      WebAuthNMakeCredentialOptions.dwAttestationConveyancePreference := WEBAUTHN_ATTESTATION_CONVEYANCE_PREFERENCE_DIRECT;
