@@ -231,7 +231,9 @@ type
     pwszCredentialType : LPCWSTR;
   end;
   WEBAUTHN_CREDENTIAL = _WEBAUTHN_CREDENTIAL;
+  TWebAuthNCredential = WEBAUTHN_CREDENTIAL;
   PWEBAUTHN_CREDENTIAL = ^WEBAUTHN_CREDENTIAL;
+  PWebAuthNCredential = PWEBAUTHN_CREDENTIAL;
 
 type
   _WEBAUTHN_CREDENTIALS = packed record
@@ -240,7 +242,9 @@ type
     pCredentials : PWEBAUTHN_CREDENTIAL;
   end;
   WEBAUTHN_CREDENTIALS = _WEBAUTHN_CREDENTIALS;
+  TWebAuthNCredentials = WEBAUTHN_CREDENTIALS;
   PWEBAUTHN_CREDENTIALS = ^WEBAUTHN_CREDENTIALS;
+  PWebAuthNCredentials = PWEBAUTHN_CREDENTIALS;
 
 //+------------------------------------------------------------------------------------------
 // Information about credential with extra information, such as, dwTransports
@@ -488,6 +492,7 @@ type
   end;
   WEBAUTHN_AUTHENTICATOR_GET_ASSERTION_OPTIONS = _WEBAUTHN_AUTHENTICATOR_GET_ASSERTION_OPTIONS;
   PWEBAUTHN_AUTHENTICATOR_GET_ASSERTION_OPTIONS = ^WEBAUTHN_AUTHENTICATOR_GET_ASSERTION_OPTIONS;
+  TWebAuthNAuthenticatorGetAsserrtionOptions = WEBAUTHN_AUTHENTICATOR_GET_ASSERTION_OPTIONS;
   PCWEBAUTHN_AUTHENTICATOR_GET_ASSERTION_OPTIONS = PWEBAUTHN_AUTHENTICATOR_GET_ASSERTION_OPTIONS;
 
 
@@ -660,7 +665,10 @@ type
     pbUserId : PBYTE;
   end;
   WEBAUTHN_ASSERTION = _WEBAUTHN_ASSERTION;
+  TWebAutNAssertion = WEBAUTHN_ASSERTION;
   PWEBAUTHN_ASSERTION = ^WEBAUTHN_ASSERTION;
+  PWebAutNAssertion = PWEBAUTHN_ASSERTION;
+
   PPWEBAUTHN_ASSERTION = ^PWEBAUTHN_ASSERTION;
 
 //+------------------------------------------------------------------------------------------

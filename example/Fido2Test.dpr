@@ -19,7 +19,8 @@ uses
   ufrmMain in 'ufrmMain.pas' {frmFido2},
   Fido2dll in '..\Fido2dll.pas',
   webauthn in '..\webauthn.pas',
-  Fido2 in '..\Fido2.pas';
+  Fido2 in '..\Fido2.pas',
+  authData in '..\authData.pas';
 
 {$R *.res}
 

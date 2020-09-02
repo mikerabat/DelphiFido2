@@ -283,6 +283,16 @@ begin
              finally
                     Free;
              end;
+
+             if fido_cred_authdata_len( cred ) > 0 then
+             begin
+                  with TFileStream.Create(edUsername.Text + '_authdata.bin', fmCreate or fmOpenWrite) do
+                  try
+                     WriteBuffer( fido_cred_authdata_ptr(cred)^, fido_cred_authdata_len( cred ) );
+                  finally
+                         Free;
+                  end;
+             end;
         end;
 
         memLog.Lines.Add('Finished');
