@@ -1,3 +1,17 @@
+// ###################################################################
+// #### This file is part of the mathematics library project, and is
+// #### offered under the licence agreement described on
+// #### http://www.mrsoft.org/
+// ####
+// #### Copyright:(c) 2020, Michael R. . All rights reserved.
+// ####
+// #### Unless required by applicable law or agreed to in writing, software
+// #### distributed under the License is distributed on an "AS IS" BASIS,
+// #### WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+// #### See the License for the specific language governing permissions and
+// #### limitations under the License.
+// ###################################################################
+
 unit authData;
 
 interface
@@ -8,6 +22,9 @@ type
   TFidoRPIDHash = Array[0..31] of byte;
   EAuthDataException = class(Exception);
 
+// ###########################################
+// #### Decodes the Authenticator buffer for both the enrolling process and
+// assertion process (with less data)
 type
   TAuthData = class(TObject)
   private
@@ -32,9 +49,14 @@ type
     function HasAttestedData : boolean;
     function HasExtensions : boolean;
 
+    function RPIDHash : TFidoRPIDHash;
+    function SigCount : LongWord;
+    function AAUID : TGuid;
+
     function ToString : string; override;
 
-    constructor Create( fromData : TBytes );
+    constructor Create( fromData : TBytes ); overload;
+    constructor Create( data : PByte; len : integer); overload;
     destructor Destroy; override;
   end;
 
@@ -62,6 +84,16 @@ end;
 function TAuthData.HasExtensions: boolean;
 begin
      Result := (fflags and $80) <> 0;
+end;
+
+function TAuthData.RPIDHash: TFidoRPIDHash;
+begin
+     Result := frpIDHash;
+end;
+
+function TAuthData.SigCount: LongWord;
+begin
+     Result := fsignCnt;
 end;
 
 procedure RevertByteOrder( stream : PByte; numBytes : integer);
@@ -118,10 +150,6 @@ begin
              raise EAuthDataException.Create('Error no memory for attestation data');
 
           Move( fromData[idx], faaGUID, sizeof(faaGUID));
-          // todo: necessary to revert byte order?
-          RevertByteOrder( @faaguid.D1, sizeof(faaGUID.D1));
-          RevertByteOrder( @faaguid.D2, sizeof(faaGUID.D2));
-          RevertByteOrder( @faaguid.D3, sizeof(faaGUID.D3));
 
           idx := idx + sizeof(TGUID);
           fcredIDLend := PWord(@fromData[idx])^;
@@ -150,7 +178,6 @@ begin
                if (coseIdx1 < 0) or (coseIdx2 < 0) or (coseIdx3 < 0) then
                   raise EAuthDataException.Create('Credential public key does not contain the fields "1", "3" or "-1"');
 
-
                cose1 := fCred.Values[coseIdx1] as TCborUINTItem;
 
                // COSE_KTY_OKP	= 1;
@@ -175,6 +202,21 @@ begin
           // cbor encoded extensions
           fExtensions := TCborDecoding.DecodeData( @fromData[idx], Length(fromData) - idx);
      end;
+end;
+
+function TAuthData.AAUID: TGuid;
+begin
+     Result := faaGUID;
+end;
+
+constructor TAuthData.Create(data: PByte; len: integer);
+var fromData : TBytes;
+begin
+     SetLength(fromData, len);
+     if len > 0 then
+        Move( data^, fromData[0], len);
+
+     Create( fromData );
 end;
 
 destructor TAuthData.Destroy;

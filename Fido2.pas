@@ -34,7 +34,7 @@ type
 type
   TFidoChallenge = Array[0..31] of byte;    // from https://fidoalliance.org/specs/fido-v2.0-rd-20170927/fido-client-to-authenticator-protocol-v2.0-rd-20170927.html
   TFidoUserId = Array[0..31] of byte; // here used as the same type as the challange
-  TFidoRPIDHash = Array[0..31] of byte;
+  TFidoSHA256Hash = Array[0..31] of byte;
 
   TFidoLogMsg = procedure(msg : string) of Object;
 
@@ -243,16 +243,18 @@ type
   TFidoCredentialFmt = (fmDef, fmFido2, fmU2F);
 
   TBaseFido2Credentials = class(TObject)
+  private
+    function GetCredID: TBytes;
   protected
     fCred : Pfido_cred_t;
     fCredType : TFidoCredentialType;
 
     fRelyingParty : string;
     fRelyingPartyName : string;
-    fChallange : TFidoChallenge;      // challange
+    fClientDataHash : TFidoSHA256Hash;      // client data hash
     fEnableHMACSecret : boolean;
-    fResidentKey : fido_opt_t;         // create a resident key on the device
-    fUserIdentification : fido_opt_t;  //
+    fResidentKey : fido_opt_t;              // create a resident key on the device
+    fUserIdentification : fido_opt_t;
 
     // user identification
     fUserName, fDisplaNamy : string;
@@ -278,8 +280,9 @@ type
     procedure SetUserIdent(const Value: fido_opt_t);
     procedure SetUserName(const Value: string);
     procedure SetFmt(const Value: TFidoCredentialFmt);
-    procedure SetChallange( cid : TFidoChallenge );
+    procedure SetClientDataHash( cid : TFidoSHA256Hash );
   public
+    property CredID : TBytes read GetCredID;
     property CredentialType : TFidoCredentialType read fCredType write SetCredType;
     property RelyingPartyName : string read fRelyingPartyName write SetRelPartyName;
     property RelyingParty : string read fRelyingParty write SetRelParty;
@@ -289,7 +292,7 @@ type
     property UserName : string read fUserName write SetUserName;
     property UserDisplayName : string read fDisplaNamy write SetDisplayName;
     property Fmt : TFidoCredentialFmt read fFmt write SetFmt;
-    property Challange : TFidoChallenge read fChallange write SetChallange;
+    property ClientDataHash : TFidoSHA256Hash read fClientDataHash write SetClientDataHash;
 
     procedure CreateRandomUid( len : integer );
     procedure SetUserId( uid : TBytes );
@@ -300,6 +303,14 @@ type
     procedure SaveUIDToFile( fn : string);
     procedure SaveCredIDToStream( stream : TStream );
     procedure SaveCredIDToFile( fn : string );
+    procedure SaveSigToFile( fn : string );
+    procedure SaveSigToStream( stream : TStream );
+    procedure SaveX5cToFile( fn : string );
+    procedure SaveX5cToStream( stream : TStream );
+
+    // converts the webauthn object described here https://www.w3.org/TR/webauthn/#authenticator-data
+    // -> basically converts to a raw cbor encoded bytes string
+    class function WebAuthNObjDataToAuthData( webAuthnauthData : TBytes ) : TBytes;
 
     constructor Create;
     destructor Destroy; override;
@@ -323,13 +334,15 @@ type
   protected
     procedure UpdateCredentials; override;
   public
-    function Verify( ClientData : TFidoChallenge ) : boolean;
+    function Verify( ClientDataHash : TFidoSHA256Hash ) : boolean;
 
     // copies the verification data from already generated credentials (e.g. CreateCredentials)
     constructor Create( fromCred : TBaseFido2Credentials); overload;
 
     // data from external sources
-    constructor Create( typ: TFidoCredentialType; fmt: TFidoCredentialFmt; authData : TBytes;
+    constructor Create( typ: TFidoCredentialType; fmt: TFidoCredentialFmt;
+                        aRelyingPartyID, aRelyingPartyName : string;
+                        authData : TBytes;
                         x509 : TBytes; Sig : TBytes; rk, uv : boolean; ext : integer); overload;
     destructor Destroy; override;
   end;
@@ -370,7 +383,7 @@ type
     property UserVerification : fido_opt_t read fUserVerification write SetUserIdent;
     property Fmt : TFidoCredentialFmt read fFmt write SetFmt;
     property UserPresence : fido_opt_t read fUserPresence write SetUserPresence;
-    property Challange : TFidoChallenge read fClientHash write fClientHash;
+    property ClientDataHash : TFidoChallenge read fClientHash write fClientHash;
 
     procedure CreateRandomCID;
 
@@ -508,7 +521,7 @@ procedure InitFidoLogger( OnLog : TFidoLogMsg );
 
 implementation
 
-//uses Setupapi, Windows;
+uses cbor;
 
 // ###########################################
 // #### Fido logging
@@ -881,7 +894,7 @@ begin
      fEnableHMACSecret := False;
 
      // init initial userid and client challange data blocks
-     RandomInit( fChallange, sizeof(fChallange) );
+     RandomInit( fClientDataHash, sizeof(fClientDataHash) );
      fCredType := ctCOSEES256;
 
      fResidentKey := FIDO_OPT_OMIT;
@@ -900,8 +913,7 @@ begin
 
      // type
      CR(fido_cred_set_type( fcred, Integer( fcredType ) ) );
-     if Length(fChallange) > 0 then
-        CR(fido_cred_set_clientdata_hash( fcred, @fChallange[0], Length(fChallange)));
+     CR(fido_cred_set_clientdata_hash( fcred, @fClientDataHash[0], Length(fClientDataHash)));
 
      // relying party
      CR(fido_cred_set_rp(fcred, PAnsiChar( UTF8String( fRelyingParty ) ),
@@ -938,6 +950,31 @@ begin
      // resident key
      CR( fido_cred_set_rk( fcred, fResidentKey ) );
      CR( fido_cred_set_uv( fcred, fUserIdentification ) );
+end;
+
+class function TBaseFido2Credentials.WebAuthNObjDataToAuthData(
+  webAuthnauthData: TBytes): TBytes;
+var cborRawByteStr : TCborByteString;
+    byteStr : RawByteString;
+    memStream : TMemoryStream;
+begin
+     SetLength( byteStr, Length(webAuthnauthData));
+     if byteStr <> '' then
+        Move( webAuthnauthData[0], byteStr[1], Length(webAuthnauthData));
+
+     cborRawByteStr := TCborByteString.Create( byteStr );
+     memStream := TMemoryStream.Create;
+     try
+        cborRawByteStr.CBOREncode(memStream);
+
+        SetLength(Result, memStream.Size);
+        memStream.Position := 0;
+        if Length(Result) <> 0 then
+           Move( PByte(memStream.Memory)^, Result[0], Length(Result));
+     finally
+            cborRawByteStr.Free;
+            memStream.Free;
+     end;
 end;
 
 destructor TBaseFido2Credentials.Destroy;
@@ -1011,9 +1048,9 @@ begin
      UpdateCredentials;
 end;
 
-procedure TBaseFido2Credentials.SetChallange(cid: TFidoChallenge);
+procedure TBaseFido2Credentials.SetClientDataHash(cid: TFidoSHA256Hash);
 begin
-     fChallange := cid;
+     fClientDataHash := cid;
      UpdateCredentials;
 end;
 
@@ -1023,6 +1060,14 @@ begin
         fido_cred_free(fCred);
 
      fCred := nil;
+end;
+
+function TBaseFido2Credentials.GetCredID: TBytes;
+begin
+     if fCred = nil then
+        raise EFidoPropertyException.Create('No credentials');
+
+     Result := ptrToByteArr(fido_cred_id_ptr(fCred), fido_cred_id_len(fCred));
 end;
 
 procedure TBaseFido2Credentials.PrepareCredentials;
@@ -1050,11 +1095,32 @@ begin
         raise EFidoPropertyException.Create('No credentials');
 
      pkLen := fido_cred_pubkey_len( fcred );
+     stream.WriteBuffer( pkLen, sizeof(pkLen));
      if pkLen > 0 then
-     begin
-          stream.WriteBuffer( pkLen, sizeof(pkLen));
-          stream.WriteBuffer( fido_cred_pubkey_ptr( fcred )^, pkLen );
+        stream.WriteBuffer( fido_cred_pubkey_ptr( fcred )^, pkLen );
+end;
+
+procedure TBaseFido2Credentials.SaveSigToFile(fn: string);
+var fs : TFileStream;
+begin
+     fs := TFileStream.Create( fn, fmCreate );
+     try
+        SaveSigToStream(fs);
+     finally
+            fs.Free;
      end;
+end;
+
+procedure TBaseFido2Credentials.SaveSigToStream(stream: TStream);
+var sigLen : LongInt;
+begin
+     if fCred = nil then
+        raise EFidoPropertyException.Create('No credentials');
+
+     sigLen := fido_cred_sig_len( fcred );
+     stream.WriteBuffer( sigLen, sizeof(sigLen));
+     if sigLen > 0 then
+        stream.WriteBuffer( fido_cred_sig_ptr( fcred )^, sigLen );
 end;
 
 procedure TBaseFido2Credentials.SaveUIDToStream(stream: TStream);
@@ -1063,26 +1129,47 @@ begin
      if fCred = nil then
         raise EFidoPropertyException.Create('No credentials');
 
-     idLen := fido_cred_id_len( fcred );
+     idLen := Length(fUserId);
+     stream.WriteBuffer( idLen, sizeof(idLen));
      if idLen > 0 then
-     begin
-          stream.WriteBuffer( idLen, sizeof(idLen));
-          stream.WriteBuffer( fido_cred_id_ptr( fcred )^, idLen );
+        stream.WriteBuffer( fUserId[0], idLen );
+end;
+
+procedure TBaseFido2Credentials.SaveX5cToFile(fn: string);
+var fs : TFileStream;
+begin
+     fs := TFileStream.Create( fn, fmCreate );
+     try
+        SaveX5cToStream(fs);
+     finally
+            fs.Free;
      end;
 end;
 
-procedure TBaseFido2Credentials.SaveCredIDToStream(stream: TStream);
-var idLen : LongInt;
+procedure TBaseFido2Credentials.SaveX5cToStream(stream: TStream);
+var x5CLen : LongInt;
 begin
      if fCred = nil then
         raise EFidoPropertyException.Create('No credentials');
 
-     idLen := Length(fuserId);
-     if idLen > 0 then
-     begin
-          stream.WriteBuffer( idLen, sizeof(idLen));
-          stream.WriteBuffer( fUserId[0], idLen );
-     end;
+     x5CLen := fido_cred_x5c_len( fcred );
+     stream.WriteBuffer( x5CLen, sizeof(x5CLen));
+     if x5CLen > 0 then
+        stream.WriteBuffer( fido_cred_x5C_ptr( fcred )^, x5CLen );
+end;
+
+procedure TBaseFido2Credentials.SaveCredIDToStream(stream: TStream);
+var idLen : integer;
+    pData : PByte;
+begin
+     if fCred = nil then
+        raise EFidoPropertyException.Create('No credentials');
+
+     idLen := fido_cred_id_len( fCred );
+     pData := fido_cred_id_ptr( fCred );
+     stream.WriteBuffer( idLen, sizeof(idLen));
+     if (idLen > 0) and (pData <> nil) then
+        stream.WriteBuffer( pData^, idLen );
 end;
 
 // #########################################################
@@ -1109,7 +1196,7 @@ begin
         CR( fido_cred_set_sig( fcred, @fSig[0], Length(fSig) ) );
 end;
 
-function TFidoCredVerify.Verify(ClientData: TFidoChallenge): boolean;
+function TFidoCredVerify.Verify(ClientDataHash: TFidoSHA256Hash): boolean;
 var r : integer;
 begin
      if Length(fAuthData) = 0 then
@@ -1119,7 +1206,7 @@ begin
      if Length(fSig) = 0 then
         raise EFidoPropertyException.Create('sig missing');
 
-     fChallange := ClientData;
+     fClientDataHash := ClientDataHash;
      PrepareCredentials;
 
      // ###########################################
@@ -1128,18 +1215,22 @@ begin
      Result := r = FIDO_OK;
      if r <> FIDO_OK then
      begin
-          REsult := False;
+          Result := False;
 
           if r <> FIDO_ERR_INVALID_CREDENTIAL then
              CR(r);
      end;
 end;
 
-constructor TFidoCredVerify.Create(typ: TFidoCredentialType; fmt: TFidoCredentialFmt; authData, x509,
-  Sig: TBytes; rk, uv: boolean; ext: integer);
+constructor TFidoCredVerify.Create(typ: TFidoCredentialType; fmt: TFidoCredentialFmt;
+  aRelyingPartyID, aRelyingPartyName : string;
+  authData, x509, Sig: TBytes;
+  rk, uv: boolean; ext: integer);
 begin
      inherited Create;
 
+     fRelyingParty := aRelyingPartyID;
+     fRelyingPartyName := aRelyingPartyName;
      fCredType := typ;
      fFmt := fmt;
      fAuthData := Copy(authData, 0, Length(authData));
@@ -1243,7 +1334,7 @@ begin
      begin
           credVerify := TFidoCredVerify.Create(self);
           try
-             Result := credVerify.Verify(fChallange);
+             Result := credVerify.Verify(fClientDataHash);
           finally
                  credVerify.Free;
           end;

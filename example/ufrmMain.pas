@@ -80,7 +80,7 @@ var
 
 implementation
 
-uses Fido2dll, webauthn, StrUtils, Fido2;
+uses Fido2dll, webauthn, StrUtils, Fido2, authData, cbor;
 
 {$R *.dfm}
 
@@ -448,7 +448,7 @@ begin
                               fido_cred_x5c_ptr(cred), fido_cred_x5c_len(cred), 
                               fido_cred_sig_ptr(cred), fido_cred_sig_len(cred),
                               residentKey, userVerification, ext);
-                              ; 
+
         finally
                fido_cred_free(cred);
         end;
@@ -469,13 +469,14 @@ var dev : Pfido_dev_t;
     infoLen : integer;
     pinfo : PPAnsiChar;
     i : integer;
-    pGuid : PByte;
+    pGuid0 : PByte;
     s : string;
     valuePtr : PBoolean;
     maxMsgSize : int64;
     pinProto : PByte;
     pinProtoLen : integer;
     retries : integer;
+    pGuid1 : PGuid;
 begin
      if fUSBPath = '' then
      begin
@@ -547,18 +548,21 @@ begin
                         inc(pInfo);
                    end;
 
-                   pGuid := fido_cbor_info_aaguid_ptr(ci);
+                   pGuid0 := fido_cbor_info_aaguid_ptr(ci);
                    infoLen := fido_cbor_info_aaguid_len( ci );
-                   assert(pGuid <> nil, 'Error no info guid avail');
+                   assert(pGuid0 <> nil, 'Error no info guid avail');
 
                    s := '';
                    memLog.Lines.Add('Guid len: ' + intToStr(infoLen) );
                    for i := 0 to infoLen - 1 do
                    begin
-                        s := s + IntToHex( pGuid^, 2 );
-                        inc(pGuid);
+                        s := s + IntToHex( pGuid0^, 2 );
+                        inc(pGuid0);
                    end;
                    memLog.Lines.Add('Guid: ' + s);
+
+                   pGuid1 := PGuid(fido_cbor_info_aaguid_ptr(ci));
+                   memLog.Lines.Add('Guid Str: ' + GUIDToString( pGuid1^ ) );
 
 
                    pInfo := fido_cbor_info_options_name_ptr(ci);
@@ -1088,7 +1092,7 @@ begin
                      verify := TFidoAssertVerify.Create;
                      try
                         verify.LoadPKFromFile(edUsername.Text + '_obj_pk.bin');
-                        verify.Challange := assert.Challange;
+                        verify.ClientDataHash := assert.ClientDataHash;
                         verify.Fmt := fmFido2;
                         verify.UserPresence := FIDO_OPT_TRUE;
                         verify.UserVerification := FIDO_OPT_TRUE;

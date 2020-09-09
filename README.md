@@ -20,3 +20,32 @@ fidotest.com which with a bit of change in the hosts file points to localhost.
 
 The project is based on Delphi 2010 and not tested on later versions - due to 
 the use of some generics it is also not compatible with older versions.
+
+There are external dependency on SuperObject used to decode and encode JSON.
+Download and install it from https://github.com/hgourvest/superobject
+and a Delphi CBOR implementation from https://github.com/mikerabat/DelphiCBOR
+
+
+## Apache module ##
+
+There is now a small project available that allows to integrate the base functionality
+of WebAuthn into an Apache 2.2 server. The project also relies on Indy and OpenSSL functionality for
+the SHA-256 hashing so make sure you keep the latest Indy OpenSSL compatible binaries around.
+
+Please note there is only a very simple file based key storage and no device storage implemented so anyone using that
+should do it differently ;)
+
+Please note that the WebAuthn website source is based on the great work of the webauthn.io guys!!
+
+Installation:
+* Setup an apache server (e.g. xamp or from https://www.apachelounge.com/download/)
+* Add a folder webauthnmod to the apache installation and copy the cbor.dll, crypto-45.dll and fido2.dll to this folder.
+* Point the Delphi Apache output folder to this folder
+* Add the line 
+   LoadModule fido2_module webuthmod/mod_fidoWebauthn.so
+  to the httpd.conf file.
+* Create a local https certificate (can be self signed) and enable encryption in the httpd.conf file.
+  e.g. follow instructions on https://www.sslshopper.com/article-how-to-create-and-install-an-apache-self-signed-certificate.html
+* Copy the provided htdocs files to setup a website over the original one.  
+* To debug the module you can setup "Start->Parameter" Host Application in Delphi. Provide the httpd.exe there and add the option "-X" 
+  

@@ -1,0 +1,35 @@
+<html>
+    <head>
+	
+    <meta charset="UTF-8">
+
+	<link rel="stylesheet" type="text/css" href="index.css">
+	<script type="text/javascript" src="src/base64.js" language="javascript"></script>
+	<script type="text/javascript" src="src/cbor.js" language="javascript"></script>
+	<script type="text/javascript" src="src/jquery-3.2.1.min.js" language="javascript"></script>
+<!--	<script type="text/javascript" src="src/moment.min.js" language="javascript"></script>
+	<script type="text/javascript" src="src/bootstrap.min.js" language="javascript"></script> -->
+	<script type="text/javascript" src="src/webauthn.js" language="javascript"></script>
+	</head>
+	
+	<body>
+	
+	<h5>A demo of the WebAuthn specification</h5>
+                   
+    <div class="form-group">
+    <input type="email" class="form-control form-control-lg" id="input-email" placeholder="example_username">
+    </div>
+				   
+	
+	<div class="input-group mb-3">
+      <button onclick="makeCredential()" id="register-button" class="btn btn-lg btn-primary">Register</button>
+      <button onclick="getAssertion()" id="login-button" class="btn btn-lg btn-primary"
+              data-toggle="popover" data-content="Success! Now try logging in :)">Login</button>
+	  <button onClick="showCred()" id="showcred-button" class="btn btn-lg btn-primary">Show</button>
+    </div>
+	
+	<p></p>
+	
+	
+	</body>
+</html>
