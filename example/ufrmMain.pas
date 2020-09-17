@@ -899,6 +899,7 @@ begin
                     'To reset start this routine within 5 seconds after attaching the device!', mtConfirmation, [mbYes, mbNo], -1) = mrNo then
         exit;
 
+     btnCheckKeyClick(nil);
      if fUSBPath = '' then
      begin
           memLog.Lines.Add('No device defined - click check key first');
@@ -913,12 +914,17 @@ begin
            raise Exception.Create('Cannot open device ' + String(fUSBPath));
 
         r := fido_dev_reset( dev );
-        if r <> FIDO_OK then
-           memLog.Lines.Add( Format('Failed: fido_dev_make_cred: %s (%d)', [String(fido_strerr(r)), r]));
+        if r <> FIDO_OK
+        then
+            memLog.Lines.Add( Format('Failed: fido_dev_make_cred: %s (%d)', [String(fido_strerr(r)), r]))
+        else
+            memLog.Lines.Add( 'Successfully reset the device');
 
         r := fido_dev_close(dev);
         if r <> FIDO_OK then
            memLog.Lines.Add( Format('Failed: fido_dev_close: %s (%d)', [String(fido_strerr(r)), r]));
+
+
      finally
             fido_dev_free(dev);
      end;
@@ -944,7 +950,6 @@ begin
              begin
                   if not InputQuery( 'Pin', 'Input then new Pin', Pin) then
                      continue;
-                  pin := '57283918';
                   credman := TFido2CredentialManager.Create;
                   try
                      if credman.Open( devList[cnt], pin, errStr) then

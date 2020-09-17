@@ -547,12 +547,20 @@ end;
 
 const cMaxFido2Len = 63;
 
-procedure RandomInit(var blk; len : integer);
+procedure RandomInit(var blk; len : integer; ensureNonZeroFirstByte : boolean);
 var i : integer;
     pBlk : PByteArray;
 begin
      pBlk := @blk;
-     for i := 0 to len - 1 do
+
+     pBlk^[0] := 0;
+
+     // first byte may not be 0 or one (at least as for the user id)
+     repeat
+           pBlk^[0] := Byte( Random(High(Byte) + 1) );
+     until (ensureNonZeroFirstByte = False) or (pBlk^[0] > 1);
+
+     for i := 1 to len - 1 do
          pBlk^[i] := Byte( Random(High(Byte) + 1) );
 end;
 
@@ -894,7 +902,7 @@ begin
      fEnableHMACSecret := False;
 
      // init initial userid and client challange data blocks
-     RandomInit( fClientDataHash, sizeof(fClientDataHash) );
+     RandomInit( fClientDataHash, sizeof(fClientDataHash), False );
      fCredType := ctCOSEES256;
 
      fResidentKey := FIDO_OPT_OMIT;
@@ -1085,7 +1093,7 @@ end;
 procedure TBaseFido2Credentials.CreateRandomUid(len: integer);
 begin
      SetLength(fUserId, len);
-     RandomInit(fUserId[0], len);
+     RandomInit(fUserId[0], len, True);
 end;
 
 procedure TBaseFido2Credentials.SavePKToStream(stream: TStream);
@@ -1411,7 +1419,7 @@ end;
 
 constructor TBaseFidoAssert.Create;
 begin
-     RandomInit(fClientHash, sizeof(fClientHash));
+     RandomInit(fClientHash, sizeof(fClientHash), False);
 
      fRelyingParty := 'localhost';
      fEnableHMACSecret := False;
@@ -1460,7 +1468,7 @@ end;
 
 procedure TBaseFidoAssert.CreateRandomCID;
 begin
-     RandomInit(fClientHash, sizeof(fClientHash));
+     RandomInit(fClientHash, sizeof(fClientHash), False);
      UpdateAssert;
 end;
 

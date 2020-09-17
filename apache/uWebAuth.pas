@@ -2,8 +2,7 @@ unit uWebAuth;
 
 interface
 
-uses
-  SysUtils, Classes, HTTPApp, RandomEng, superobject, Fido2Json, Fido2;
+uses SysUtils, Classes, HTTPApp, authData, RandomEng, superobject, Fido2Json, Fido2;
 
 type
   TResponseHeaderType = (rtJSON, rtPNG, rtHTML, rtPDF, rtCSV, rtXML, rtBinary, rtZip, rtExe);
@@ -34,11 +33,14 @@ type
     function DecodeAttestationObj( attestStr : string; var alg : integer;
                                    var fmt : string; var sig, authData, x5c : TBytes ) : boolean;
     function VerifyCred( credential : ISuperObject ) : string;
-    procedure SaveCred( userFn : string; cred : TFidoCredVerify );
+    procedure SaveCred( userFn : string; cred : TFidoCredVerify; authData : TAuthData );
 
     function StartAssert( userName : string ) : string;
     function VerifyAssert( assertion : ISuperObject ) : string;
+    function CredToUser( credId : string; var uname : string ) : boolean;
+    function CheckSigCounter( credId : string; authData : TAuthData ) : boolean;
 
+    function CheckCredentials( userHandle : string; origChallenge : ISuperObject; var credId : string ) : boolean;
     procedure prepareResponse(Response: TWebResponse;
       const rt: TResponseHeaderType = rtJSon);
     function getStringParam(Request : TWebRequest; const Name,
@@ -54,7 +56,7 @@ var modWebAuth: TmodWebAuth;
 
 implementation
 
-uses Fido2Dll, cbor, authData, Windows;
+uses Fido2Dll, cbor, Windows;
 
 {$R *.dfm}
 
@@ -83,7 +85,7 @@ begin
 end;
 
 
-procedure TmodWebAuth.SaveCred(userFn: string; cred: TFidoCredVerify);
+procedure TmodWebAuth.SaveCred(userFn: string; cred: TFidoCredVerify; authData : TAuthData);
 var clientData : ISuperObject;
     credData : ISuperObject;
     credFN : string;
@@ -122,8 +124,23 @@ begin
         Add(clientData.S['publicKey.user.name'] + '=' + credFN);
 
         // -> add the user handle to the file
+        if clientData.S['publicKey.user.id'] <> '' then
+           Add(clientData.S['publicKey.user.id'] + '=' + credFN);
 
         SaveToFile( 'users.txt' );
+     finally
+            Free;
+     end;
+
+     // ###########################################
+     // #### Write device data to check the signal counter
+     with TStringList.Create do
+     try
+        if FileExists('sigCounters.txt') then
+           LoadFromFile('sigCounters.txt');
+
+        Add( credIDBase64 + '=' + IntToStr(authData.SigCount));
+        SaveToFile('sigCounters.txt');
      finally
             Free;
      end;
@@ -135,9 +152,12 @@ var res : ISuperObject;
     i: Integer;
     credIDFN : string;
     credObj : ISuperObject;
+    fs : TFileStream;
 begin
      credIDFN := '';
-     if not IsAlreadRegistered(userName, credIDFN) then
+
+     // no user name given -> just create a challenge (maybe a user handle is used)
+     if (userName <> '') and not IsAlreadRegistered(userName, credIDFN) then
         exit('{"error":0,"msg":"User not registered"}');
 
      res := SO('{"publicKey":{"allowCredentials":[]}}');
@@ -150,13 +170,25 @@ begin
      res.S['publicKey.rpid'] := FidoServer.RelyingPartyId;
      res.B['publicKey.userVerificaiton'] := FidoServer.UserVerification;
 
+     // return an empty list if no username was provided -> user id required
+     if credIDFN <> '' then
+     begin
+          credObj := SO( '{"type":"public-key"}' );
+          credObj.S['id'] := Copy( credIDFN, 1, Length(credIDFN) - 5);
 
-     credObj := SO( '{"type":"public-key"}' );
-     credObj.S['id'] := Copy( credIDFN, 1, Length(credIDFN) - 5);
-
-     res.A['publicKey.allowCredentials'].Add( credObj );
+          res.A['publicKey.allowCredentials'].Add( credObj );
+     end;
 
      res.O['extensions'] := SO('{"txAuthSimple":""}');
+
+     // ###########################################
+     // #### Save the challeng for later comparison
+     fs := TFileStream.Create(res.S['publicKey.challenge'] + '.chl', fmCreate);
+     try
+        res.SaveTo(fs);
+     finally
+            fs.Free;
+     end;
 
      Result := res.AsJSon;
 end;
@@ -175,6 +207,86 @@ begin
      // prepare random generator
      fRand := TRandomGenerator.Create(raMersenneTwister);
      fRand.Init(0);
+end;
+
+function TmodWebAuth.CheckCredentials(userHandle: string;
+  origChallenge: ISuperObject; var credId : string): boolean;
+var cred : TSuperArray;
+begin
+     if userHandle <> ''
+     then
+         Result := IsAlreadRegistered(userHandle, credId)
+     else
+     begin
+          Result := False;
+          cred := origChallenge.A['publicKey.allowCredentials'];
+          if (cred <> nil) and (cred.Length > 0) then
+          begin
+               Result := True;
+               credId := cred.O[0].S['id'];
+          end;
+     end;
+end;
+
+function TmodWebAuth.CheckSigCounter(credId : string; authData: TAuthData): boolean;
+var idx : integer;
+    sigCnt: LongWord;
+begin
+     Result := False;
+     if not FileExists('sigCounters.txt') then
+        exit;
+
+     with TStringList.Create do
+     try
+        LoadFromFile( 'sigCounters.txt' );
+
+        idx := IndexOfName(credId);
+
+        if idx < 0 then
+           exit;
+
+        sigCnt := StrToInt( ValueFromIndex[ idx ] );
+        Result := ((sigCnt = 0) and (authData.SigCount = 0)) or
+                  (sigCnt < authData.SigCount);
+
+        if Result and (authData.SigCount > 0) then
+        begin
+             ValueFromIndex[idx] := IntToStr(authData.SigCount);
+
+             SaveToFile('sigCounters.txt');
+        end;
+     finally
+            Free;
+     end;
+end;
+
+function TmodWebAuth.CredToUser(credId: string; var uname: string): boolean;
+var i : integer;
+    UserCred : String;
+begin
+     Result := FileExists('users.txt');
+
+     if not Result then
+        exit;
+
+     Result := False;
+     with TStringList.Create do
+     try
+        LoadFromFile('users.txt');
+
+        for i := 0 to Count - 1 do
+        begin
+             userCred := Copy( ValueFromIndex[i], 1, Length(ValueFromIndex[i]) - 5);
+             if credId = userCred then
+             begin
+                  uname := Names[i];
+                  Result := True;
+                  break;
+             end;
+        end;
+     finally
+            Free;
+     end;
 end;
 
 function TmodWebAuth.DecodeAttestationObj(attestStr: string; var alg: integer;
@@ -318,7 +430,12 @@ begin
         fn := '';
         for i := 0 to High(Challenge) do
             challenge[i] := fRand.RandInt( 256 );
-        for i := 0 to High(uid) do
+
+        repeat
+              uid[0] := fRand.RandInt( 256 );
+        until uid[0] > 1;
+
+        for i := 1 to High(uid) do
             uid[i] := fRand.RandInt( 256 );
 
         // create unique random uid and challange
@@ -385,6 +502,11 @@ var clientData : ISuperObject;
     buf : TBytes;
     challenge : TFidoChallenge;
     authData : TBytes;
+    challengeFs : string;
+    origChallenge : ISuperObject;
+    selCredId : string;
+    uname : string;
+    res : ISuperObject;
 begin
      Result := '{"error":0,"msg":"Error parsing content"}';
 
@@ -403,6 +525,24 @@ begin
 
      if assertion.S['type'] <> 'public-key' then
         exit;
+
+     challengeFs := clientData.S['challenge'] + '.chl';
+
+     if not FileExists(challengeFs) then
+     begin
+          Result := '{"error":1,"msg":"Challenge not initiated"}';
+          exit;
+     end;
+
+     // ###########################################
+     // #### check if credential id is in the list
+     with TStringList.Create do
+     try
+        LoadFromFile(challengeFS);
+        origChallenge := SO(Text);
+     finally
+            Free;
+     end;
 
      // create the client hash that is later used in the verification process
      clientDataHash := SHA256FromBuf( @clientDataStr[1], Length(clientDataStr) );
@@ -426,6 +566,27 @@ begin
 
         OutputDebugString( PChar('Guid: ' + GuidToString(authDataObj.AAUID)) );
 
+        if not CheckCredentials( userHandle, origChallenge, selCredId ) then
+        begin
+             Result := '{"error":2,"msg":"Credentials not in user list"}';
+             exit;
+        end;
+
+        if selCredId <> credID then
+        begin
+             Result := '{"error":2,"msg":"Credentials not in user list"}';
+             exit;
+        end;
+
+        // check user id attached to credential id
+        if not CredToUser( credId, uname ) then
+        begin
+             Result := '{"error":2,"msg":"Credentials not in user list"}';
+             exit;
+        end;
+
+        // todo: maybe it's a good idea to check the guid (got from direct attestation)
+
         if not authDataObj.UserPresent then
         begin
              Result := '{"error":3,"msg":"Error: parameter user present not set"}';
@@ -437,13 +598,6 @@ begin
              Result := '{"error":4,"msg":"Error: parameter user verification not set to the default"}';
              exit;
         end;
-
-        // check signal counter
-        //if authDAtaObj.SigCount < lastCounter then
-//        begin
-//             Result := '{"error":5,"msg":"Signal counter is too low - maybe cloned?"}';
-//             exit;
-//        end;
 
         // check rp hash
         rpIDHash := authDataObj.rpIDHash;
@@ -488,7 +642,15 @@ begin
                                    sig )
            then
            begin
-                Result := '{"success":true}';
+                // check signal counter
+                if not CheckSigCounter( credId, authDataObj ) then
+                begin
+                     Result := '{"error":5,"msg":"Signal counter is too low - maybe cloned?"}';
+                     exit;
+                end;
+                res := SO('{"success":true}');
+                res.S['username'] := uname;
+                Result := res.AsJSon;
            end
            else
            begin
@@ -638,7 +800,7 @@ begin
            begin
                 // ###########################################
                 // #### save EVERYTHING to a database
-                SaveCred(userDataFn, credVerify);
+                SaveCred(userDataFn, credVerify, authDataObj);
            end;
         finally
                credVerify.Free;
