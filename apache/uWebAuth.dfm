@@ -1,4 +1,4 @@
-object modWebAuth: TmodWebAuth
+object modFidoWebauthn: TmodFidoWebauthn
   OldCreateOrder = False
   OnCreate = WebModuleCreate
   OnDestroy = WebModuleDestroy

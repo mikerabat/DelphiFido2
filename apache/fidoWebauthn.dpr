@@ -6,15 +6,16 @@ uses
   HTTPD2 in 'HTTPD2.pas',
   ApacheTwoApp in 'ApacheTwoApp.pas',
   ApacheTwoHTTP in 'ApacheTwoHTTP.pas',
-  uWebAuth in 'uWebAuth.pas' {modWebAuth: TWebModule},
+  uWebAuth in 'uWebAuth.pas' {modFidoWebauthn: TWebModule},
   Fido2 in '..\Fido2.pas',
   Fido2dll in '..\Fido2dll.pas',
-  Fido2Json in '..\Fido2Json.pas',
+  WebauthnUtil in '..\WebauthnUtil.pas',
   windows,
   classes,
   superobject,
   authData in '..\authData.pas',
-  cbor in 'D:\DelphiCBOR\cbor.pas';
+  cbor in 'D:\DelphiCBOR\cbor.pas',
+  FileFidoDataHandling in '..\FileFidoDataHandling.pas';
 
 {.$R *.res}
 
@@ -25,6 +26,6 @@ exports
   apache_module name 'fido2_module';
 begin
   Application.Initialize;
-  Application.CreateForm(TmodWebAuth, modWebAuth);
+  Application.CreateForm(TmodFidoWebauthn, modFidoWebauthn);
   Application.Run;
 end.

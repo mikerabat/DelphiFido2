@@ -44,8 +44,20 @@ Installation:
 * Add the line 
    LoadModule fido2_module webuthmod/mod_fidoWebauthn.so
   to the httpd.conf file.
+* Add the section: 
+   <Location /auth2>
+	SetHandler mod_fidoWebauthn-handler
+   </Location>
+   to the httpd.conf file. Note that the standard scripts provided here use this path (e.g. webauthn.js)
 * Create a local https certificate (can be self signed) and enable encryption in the httpd.conf file.
   e.g. follow instructions on https://www.sslshopper.com/article-how-to-create-and-install-an-apache-self-signed-certificate.html
 * Copy the provided htdocs files to setup a website over the original one.  
 * To debug the module you can setup "Start->Parameter" Host Application in Delphi. Provide the httpd.exe there and add the option "-X" 
-  
+* One can change the default file data handling output directory by the registry value
+     HKEY_LOCAL_MACHINE\Software\FidoWebauthn
+           -> StringValue: DataPath
+  If that value does not exist the current module directory is used.
+* There is a global Semaphore to protect the access to the files. Per default value is 'Global\FIDODataHandler' but can changed
+  by the registry value:
+      HKEY_LOCAL_MACHINE\Software\FidoWebauthn
+	  -> string: Semaphore to define the complete path used.
