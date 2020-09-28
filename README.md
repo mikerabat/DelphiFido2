@@ -23,7 +23,9 @@ the use of some generics it is also not compatible with older versions.
 
 There are external dependency on SuperObject used to decode and encode JSON.
 Download and install it from https://github.com/hgourvest/superobject
-and a Delphi CBOR implementation from https://github.com/mikerabat/DelphiCBOR
+and a Delphi CBOR implementation from https://github.com/mikerabat/DelphiCBOR.
+The webauthn project for apache needs the random number generator from
+https://github.com/mikerabat/mrmath . 
 
 
 ## Apache module ##
