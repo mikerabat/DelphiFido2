@@ -25,7 +25,7 @@ unit WebauthnUtil;
 
 interface
 
-uses SysUtils, Fido2, SuperObject, cbor, authData, RandomEng;
+uses SysUtils, Fido2, SuperObject, cbor, authData, winCryptRandom;
 
 
 type
@@ -73,7 +73,7 @@ type
     fUserName: string;
     fUserid : TFidoUserId;
     fChallenge : TFidoChallenge;
-    fRand : TRandomGenerator;
+    fRand : IRndEngine;
 
     procedure InitUserId;
     procedure InitChallenge;
@@ -89,7 +89,7 @@ type
 
     function CheckUser( uname : string ) : boolean;
 
-    constructor Create( UName, displName : string; rand : TRandomGenerator);
+    constructor Create( UName, displName : string; rand : IRndEngine);
   end;
 
 type
@@ -112,16 +112,14 @@ type
 type
   TFidoUserAssert = class(TCustomFidoVerify)
   private
-    fRand : TRandomGenerator;
-    fOwnsRandom : boolean;
+    fRand : IRndEngine;
     function CheckCredentials(userHandle: string; origChallenge: ISuperObject;
       var credId: string): boolean;
   public
     function StartAssertion( uname : string ) : string;
     function VerifyAssert( assertionStr : string; var resStr : string ) : boolean;
 
-    constructor Create(rand : TRandomGenerator);
-    destructor Destroy; override;
+    constructor Create(rand : IRndEngine);
   end;
 
 // ###########################################
@@ -260,7 +258,7 @@ begin
      Result := not FidoDataHandler.IsAlreadRegistered(uname);
 end;
 
-constructor TFidoUserStartRegister.Create(UName, displName: string; rand : TRandomGenerator);
+constructor TFidoUserStartRegister.Create(UName, displName: string; rand : IRndEngine);
 begin
      fRand := rand;
      fDisplName := displName;
@@ -280,7 +278,7 @@ procedure TFidoUserStartRegister.InitChallenge;
 var i : integer;
 begin
      for i := 0 to Length(fchallenge) - 1 do
-         fChallenge[i] := fRand.RandInt( 256 );
+         fChallenge[i] := fRand.Random;
 end;
 
 procedure TFidoUserStartRegister.InitUserId;
@@ -289,11 +287,11 @@ begin
      // first byte of the random user ID shall not be one or zero
      // see: https://developers.yubico.com/WebAuthn/WebAuthn_Developer_Guide/User_Handle.html
      repeat
-           fUserid[0] := fRand.RandInt( 256 );
+           fUserid[0] := fRand.Random;
      until fUserid[0] > 1;
 
      for i := 1 to High(fUserid) do
-         fUserid[i] := fRand.RandInt( 256 );
+         fUserid[i] := fRand.Random;
 end;
 
 procedure TFidoUserStartRegister.SaveChallenge;
@@ -581,24 +579,14 @@ end;
 
 { TFidoUserAssert }
 
-constructor TFidoUserAssert.Create(rand: TRandomGenerator);
+constructor TFidoUserAssert.Create(rand: IRndEngine);
 begin
      fRand := rand;
 
      if not Assigned(fRand) then
-        fRand := TRandomGenerator.Create(raOS);
-
-     fOwnsRandom := rand <> fRand;
+        fRand := CreateWinRndObj;
 
      inherited Create;
-end;
-
-destructor TFidoUserAssert.Destroy;
-begin
-     if fOwnsRandom then
-        fRand.Free;
-
-     inherited;
 end;
 
 function TFidoUserAssert.StartAssertion(uname: string): string;
@@ -617,7 +605,7 @@ begin
      res := SO('{"publicKey":{"allowCredentials":[]}}');
 
      for i := 0 to Length(challenge) - 1 do
-         challenge[i] := fRand.RandInt( 256 );
+         challenge[i] := fRand.Random;
 
      res.S['publicKey.challenge'] := Base64URLEncode(@challenge[0], length(challenge));
      res.I['publicKey.timeout'] := FidoServer.TimeOut;

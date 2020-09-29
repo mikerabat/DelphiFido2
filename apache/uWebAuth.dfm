@@ -1,7 +1,6 @@
 object modFidoWebauthn: TmodFidoWebauthn
   OldCreateOrder = False
   OnCreate = WebModuleCreate
-  OnDestroy = WebModuleDestroy
   Actions = <
     item
       Name = 'itEnroll'

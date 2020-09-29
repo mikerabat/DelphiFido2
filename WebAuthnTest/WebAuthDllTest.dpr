@@ -4,7 +4,8 @@ uses
   Forms,
   ufrmMain in 'ufrmMain.pas' {frmWebAuthnTest},
   webauthn in '..\webauthn.pas',
-  authData in '..\authData.pas';
+  authData in '..\authData.pas',
+  winCryptRandom in '..\winCryptRandom.pas';
 
 {$R *.res}
 

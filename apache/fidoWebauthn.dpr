@@ -15,7 +15,8 @@ uses
   superobject,
   authData in '..\authData.pas',
   cbor in 'D:\DelphiCBOR\cbor.pas',
-  FileFidoDataHandling in '..\FileFidoDataHandling.pas';
+  FileFidoDataHandling in '..\FileFidoDataHandling.pas',
+  winCryptRandom in '..\winCryptRandom.pas';
 
 {.$R *.res}
 

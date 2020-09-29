@@ -1,8 +1,24 @@
+// ###################################################################
+// #### This file is part of the mathematics library project, and is
+// #### offered under the licence agreement described on
+// #### http://www.mrsoft.org/
+// ####
+// #### Copyright:(c) 2019, Michael R. . All rights reserved.
+// ####
+// #### Unless required by applicable law or agreed to in writing, software
+// #### distributed under the License is distributed on an "AS IS" BASIS,
+// #### WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+// #### See the License for the specific language governing permissions and
+// #### limitations under the License.
+// ###################################################################
+
+// interface unti for the apache webbroker interface.
+
 unit uWebAuth;
 
 interface
 
-uses SysUtils, Classes, HTTPApp, authData, RandomEng, superobject, WebauthnUtil, Fido2;
+uses SysUtils, Classes, HTTPApp, authData, superobject, WebauthnUtil, Fido2, winCryptRandom;
 
 type
   TResponseHeaderType = (rtJSON, rtPNG, rtHTML, rtPDF, rtCSV, rtXML, rtBinary, rtZip, rtExe);
@@ -12,7 +28,6 @@ type
     procedure WebModuleCreate(Sender: TObject);
     procedure modWebAuthitEnrollAction(Sender: TObject; Request: TWebRequest;
       Response: TWebResponse; var Handled: Boolean);
-    procedure WebModuleDestroy(Sender: TObject);
     procedure modWebAuthwaEnrollVerifyAction(Sender: TObject;
       Request: TWebRequest; Response: TWebResponse; var Handled: Boolean);
     procedure modWebAuthwaSettingsAction(Sender: TObject; Request: TWebRequest;
@@ -24,25 +39,9 @@ type
     procedure modWebAuthwaAssertAction(Sender: TObject; Request: TWebRequest;
       Response: TWebResponse; var Handled: Boolean);
   private
-    fRand : TRandomGenerator;
+    fRand : IRndEngine;
 
-    (*
-    function IsAlreadRegistered( uname : string ) : boolean; overload;
-    function IsAlreadRegistered( uname : string; var credIDFN : string ) : boolean; overload;
-
-    function DecodeAttestationObj( attestStr : string; var alg : integer;
-                                   var fmt : string; var sig, authData, x5c : TBytes ) : boolean;
-    function VerifyCred( credential : ISuperObject ) : string;
-    procedure SaveCred( userFn : string; cred : TFidoCredVerify; authData : TAuthData );
-
-    function StartAssert( userName : string ) : string;
-    function VerifyAssert( assertion : ISuperObject ) : string;
-    function CredToUser( credId : string; var uname : string ) : boolean;
-    function CheckSigCounter( credId : string; authData : TAuthData ) : boolean;
-
-    function CheckCredentials( userHandle : string; origChallenge : ISuperObject; var credId : string ) : boolean;
-    *)
-
+    // helper functions for the return headers and the parameter extraction
     procedure prepareResponse(Response: TWebResponse;
       const rt: TResponseHeaderType = rtJSon);
     function getStringParam(Request : TWebRequest; const Name,
@@ -52,8 +51,6 @@ type
   public
     { Public-Deklarationen }
   end;
-
-
 
 var modFidoWebauthn: TmodFidoWebauthn;
 
@@ -99,7 +96,7 @@ begin
      fidoSrv.RequireResidentKey := False;
 
      // prepare random generator
-     fRand := TRandomGenerator.Create(raMersenneTwister);
+     fRand := CreateWinRndObj;
      fRand.Init(0);
 end;
 
@@ -157,11 +154,6 @@ begin
      finally
             user.Free;
      end;
-end;
-
-procedure TmodFidoWebauthn.WebModuleDestroy(Sender: TObject);
-begin
-     fRand.Free;
 end;
 
 function Base64Fixup(base64Str: string): string;
