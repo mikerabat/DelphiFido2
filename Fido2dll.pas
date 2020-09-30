@@ -13,7 +13,7 @@
 // ###################################################################
 
 
-// fido2 dll import file for fido2.dll V 1.4.0 and higher
+// fido2 dll import file for fido2.dll V 1.5.0 and higher
 // the file is basically a conversion of the imported header files of the fido2.dll
 // based on the sources in: https://github.com/Yubico/libfido2
 
@@ -94,6 +94,10 @@ type
     path : PAnsiChar;          // device Path
 	   io_handle : Pointer;       // abstract i/o handle
 	   io : fido_dev_io_t;        // i/o functions & data
+    io_own : boolean;          // device has own io/transport
+	   rx_len : size_t;           // length of HID input reports
+	   tx_len : size_t;           // length of HID output reports
+	   flags : integer;           // internal flags; see FIDO_DEV_*
     transport : fido_dev_transport_t; // transport functions
   end;
   fido_dev_t = fido_dev;
@@ -147,8 +151,12 @@ const CTAP_AUTHDATA_USER_PRESENT	= $01;
 // HID Broadcast channel ID.
       CTAP_CID_BROADCAST	= $ffffffff;
 
+      CTAP_INIT_HEADER_LEN	 =	7;
+      CTAP_CONT_HEADER_LEN	=	5;
+
 // Expected size of a HID report in bytes.
-      CTAP_RPT_SIZE	=	64;
+      CTAP_MAX_REPORT_LEN = 64;
+      CTAP_MIN_REPORT_LEN = 8;
 
 // CTAP capability bits.
       FIDO_CAP_WINK =	$01; // if set, device supports CTAP_CMD_WINK
@@ -179,7 +187,7 @@ const CTAP_AUTHDATA_USER_PRESENT	= $01;
       FIDO_CRED_PROT_UV_REQUIRED = $03;
 
 // maximum message size
-      FIDO_MAXMSG = 1200;
+      FIDO_MAXMSG = 2048;
 
 
 // ######################################################
@@ -349,6 +357,8 @@ type
 	   options : fido_opt_array_t;    // list of supported options
 	   maxmsgsiz : UInt64;            // maximum message size
 	   protocols : fido_byte_array_t; // supported pin protocols
+    maxcredcntlst : Uint64;        // max number of credentials in list
+	   maxcredidlen : Uint64;         // max credential ID length
     fwversion : UINT64;
   end;
   fido_cbor_info_t = fido_cbor_info;
@@ -449,6 +459,7 @@ const 	FIDO_ERR_SUCCESS		= $00;
        FIDO_ERR_MISSING_PARAMETER	= $14;
        FIDO_ERR_LIMIT_EXCEEDED		= $15;
        FIDO_ERR_UNSUPPORTED_EXTENSION	= $16;
+       FIDO_ERR_FP_DATABASE_FULL =	$17;
        FIDO_ERR_CREDENTIAL_EXCLUDED	= $19;
        FIDO_ERR_PROCESSING		= $21;
        FIDO_ERR_INVALID_CREDENTIAL	= $22;
@@ -477,6 +488,7 @@ const 	FIDO_ERR_SUCCESS		= $00;
        FIDO_ERR_REQUEST_TOO_LARGE	= $39;
        FIDO_ERR_ACTION_TIMEOUT		= $3a;
        FIDO_ERR_UP_REQUIRED		= $3b;
+       FIDO_ERR_UV_BLOCKED	= $3c;
        FIDO_ERR_ERR_OTHER		= $7f;
        FIDO_ERR_SPEC_LAST		= $df;
 
@@ -579,8 +591,8 @@ function fido_cbor_info_aaguid_ptr(ci : Pfido_cbor_info_t) : PByte; cdecl; exter
 function fido_cred_authdata_ptr(ci : Pfido_cred_t) : PByte; cdecl; external libFido;
 function fido_cred_clientdata_hash_ptr(ci : Pfido_cred_t) : PAnsiChar; cdecl; external libFido;
 function fido_cred_id_ptr(ci : Pfido_cred_t) : PByte; cdecl; external libFido;
-// function fido_cred_aaguid_ptr(ci : Pfido_cred_t) : PByte; cdecl; external libFido; // not yet implemented
-// function fido_cred_aaguid_len(cred : Pfido_cred_t) : size_t; cdecl; external libFido;  // not yet implemented
+function fido_cred_aaguid_ptr(ci : Pfido_cred_t) : PByte; cdecl; external libFido;
+function fido_cred_aaguid_len(ci : Pfido_cred_t) : size_t; cdecl; external libFido;
 function fido_cred_user_id_ptr(ci : Pfido_cred_t) : PByte; cdecl; external libFido;
 function fido_cred_pubkey_ptr(ci : Pfido_cred_t) : PAnsiChar; cdecl; external libFido;
 function fido_cred_sig_ptr(ci : Pfido_cred_t) : PByte; cdecl; external libFido;
@@ -626,6 +638,8 @@ function fido_dev_close(dev : Pfido_dev_t) : integer; cdecl; external libFido;
 function fido_dev_get_assert(dev : Pfido_dev_t; assert : Pfido_assert_t; pin : PAnsiChar) : integer; cdecl; external libFido;
 function fido_dev_get_cbor_info(dev : Pfido_dev_t; ci : Pfido_cbor_info_t) : integer; cdecl; external libFido;
 function fido_dev_get_retry_count(dev : Pfido_dev_t; var retries : Integer) : integer; cdecl; external libFido;
+function fido_dev_get_touch_begin(dev : Pfido_dev_t) : integer; cdecl; external libFido;
+function fido_dev_get_touch_status(dev : Pfido_dev_t; var touched : integer; waitMs : integer) : integer; cdecl; external libFido;
 function fido_dev_info_manifest(devlist : Pfido_dev_info_t; ilen : size_t; var olen : Integer) : integer; cdecl; external libFido;
 function fido_dev_make_cred(dev : Pfido_dev_t; cred : Pfido_cred_t; pin : PAnsiChar) : integer; cdecl; external libFido;
 function fido_dev_open_with_info(dev : Pfido_dev_t ) : integer; cdecl; external libFido;
@@ -635,6 +649,11 @@ function fido_dev_set_io_functions(dev : Pfido_dev_t; io : Pfido_dev_io_t) : int
 function fido_dev_set_pin(dev : Pfido_dev_t; pin : PAnsiChar; oldPin : PAnsiChar) : integer; cdecl; external libFido;
 function fido_dev_set_transport_functions(dev : Pfido_dev_t; transFun : Pfido_dev_transport_t) : integer; cdecl; external libFido;
 function fido_dev_cancel(dev : Pfido_dev_t) : integer; cdecl; external libFido;
+function fido_dev_has_pin(dev : Pfido_dev_t) : boolean; cdecl; external libFido;
+function fido_dev_is_fido2(dev : Pfido_dev_t) : boolean; cdecl; external libFido;
+function fido_dev_supports_pin(dev : Pfido_dev_t) : boolean; cdecl; external libFido;
+function fido_dev_supports_cred_prot(dev : Pfido_dev_t) : boolean; cdecl; external libFido;
+
 
 function fido_assert_authdata_len(assert : Pfido_assert_t; idx : size_t) : size_t; cdecl; external libFido;
 function fido_assert_clientdata_hash_len(assert : Pfido_assert_t) : size_t; cdecl; external libFido;
@@ -668,8 +687,9 @@ function fido_dev_info_vendor(di : Pfido_dev_info_t) : smallInt; cdecl; external
 function fido_dev_info_product(di : Pfido_dev_info_t) : smallInt; cdecl; external libFido;
 function fido_cbor_info_maxmsgsiz(ci : Pfido_cbor_info_t) : UInt64; cdecl; external libFido;
 function fido_cbor_info_fwversion(ci : Pfido_cbor_info_t) : UINT64; cdecl; external libFido;
+function fido_cbor_info_maxcredcntlst(ci : Pfido_cbor_info_t) : UInt64; cdecl; external libFido;
+function fido_cbor_info_maxcredidlen(ci : Pfido_cbor_info_t) : UINT64; cdecl; external libFido;
 
-function fido_dev_is_fido2(dev : Pfido_dev_t) : boolean; cdecl; external libFido;
 
 // ###########################################
 // #### from bio.h

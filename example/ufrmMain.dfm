@@ -12,6 +12,7 @@ object frmFido2: TfrmFido2
   Font.Style = []
   OldCreateOrder = False
   OnCreate = FormCreate
+  OnDestroy = FormDestroy
   PixelsPerInch = 96
   TextHeight = 13
   object lblHint: TLabel
@@ -134,7 +135,7 @@ object frmFido2: TfrmFido2
   end
   object btnCreadCredObj: TButton
     Left = 344
-    Top = 182
+    Top = 166
     Width = 89
     Height = 25
     Caption = 'Create Cred obj'
@@ -152,11 +153,27 @@ object frmFido2: TfrmFido2
   end
   object btnAssertObj: TButton
     Left = 344
-    Top = 213
+    Top = 197
     Width = 89
     Height = 25
     Caption = 'Assert Obj'
     TabOrder = 13
     OnClick = btnAssertObjClick
+  end
+  object btnPollTouch: TButton
+    Left = 344
+    Top = 249
+    Width = 89
+    Height = 25
+    Caption = 'Poll Touch'
+    TabOrder = 14
+    OnClick = btnPollTouchClick
+  end
+  object timPolStatus: TTimer
+    Enabled = False
+    Interval = 50
+    OnTimer = timPolStatusTimer
+    Left = 536
+    Top = 112
   end
 end

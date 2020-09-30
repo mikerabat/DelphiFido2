@@ -105,6 +105,8 @@ type
     fDevMinor : integer;
     fDevBuild : integer;
     fRetryCnt : integer;
+    fSupportPin : boolean;
+    fSupportCredProtection : boolean;
 
     fDevFlags : TFidoDevFlags;
     fIsFido2 : boolean;
@@ -114,6 +116,7 @@ type
     procedure OpenDevice;
     procedure CloseDevice;
     function GetFirmware: string;
+    function GetHasPin: boolean;
   protected
     procedure ReadProperties(di : Pfido_dev_info_t);
     procedure ReadDev;
@@ -131,6 +134,9 @@ type
     property RetryCnt : integer read fRetryCnt;
     property Protocol : byte read fProtocol;
     property Flags : TFidoDevFlags read fDevFlags;
+    property HasPin : boolean read GetHasPin;
+    property SupportPin : boolean read fSupportPin;
+    property SupportCredProtection : boolean read fSupportCredProtection;
 
     property DevHdl : Pfido_dev_t read fDev;
 
@@ -145,6 +151,10 @@ type
     // special Yubico Reset procedure: This function may only be called within 5 seconds after
     // attaching the key.
     procedure Reset;
+
+    // touch control
+    procedure BeginTouch;
+    function GetTouchStatus(waitMs : integer = 0) : integer;
 
     // cancels the latest device operation (waiting for user interaction)
     procedure Cancel;
@@ -245,6 +255,7 @@ type
   TBaseFido2Credentials = class(TObject)
   private
     function GetCredID: TBytes;
+    function GetAAGuid: TBytes;
   protected
     fCred : Pfido_cred_t;
     fCredType : TFidoCredentialType;
@@ -293,6 +304,8 @@ type
     property UserDisplayName : string read fDisplaNamy write SetDisplayName;
     property Fmt : TFidoCredentialFmt read fFmt write SetFmt;
     property ClientDataHash : TFidoSHA256Hash read fClientDataHash write SetClientDataHash;
+
+    property AAGuid : TBytes read GetAAGuid;
 
     procedure CreateRandomUid( len : integer );
     procedure SetUserId( uid : TBytes );
@@ -699,6 +712,9 @@ begin
 
      fIsFido2 := fido_dev_is_fido2( fdev );
 
+     fSupportPin := fido_dev_supports_pin( fDev );
+     fSupportCredProtection := fido_dev_supports_cred_prot( fDev );
+
      fCBOR := nil;
      if fIsFido2 then
         fCbor := TFido2CBOR.Create( fDev );
@@ -730,6 +746,13 @@ begin
      OpenDevice;
      CR(fido_dev_reset( fDev ));
      CloseDevice;
+end;
+
+procedure TFidoDevice.BeginTouch;
+begin
+     assert( Assigned( fDev ), 'Error no device opened');
+
+     CR( fido_dev_get_touch_begin( fDev ) );
 end;
 
 procedure TFidoDevice.Cancel;
@@ -1068,6 +1091,14 @@ begin
         fido_cred_free(fCred);
 
      fCred := nil;
+end;
+
+function TBaseFido2Credentials.GetAAGuid: TBytes;
+begin
+     if fCred = nil then
+        raise EFidoPropertyException.Create('No credentials');
+
+     Result := ptrToByteArr(fido_cred_aaguid_ptr(fCred), fido_cred_aaguid_len(fCred) );
 end;
 
 function TBaseFido2Credentials.GetCredID: TBytes;
@@ -1909,11 +1940,25 @@ begin
      Result := Format('%d.%d.%d', [fDevMajor, fDevMinor, fDevBuild] ) ;
 end;
 
+function TFidoDevice.GetHasPin: boolean;
+begin
+     Assert( Assigned(fDev), 'error no device assigned');
+
+     Result := fido_dev_has_pin( fDev );
+end;
+
+function TFidoDevice.GetTouchStatus(waitMs: integer): integer;
+begin
+     Assert( Assigned(fDev), 'error no device assigned');
+
+     CR( fido_dev_get_touch_status( fDev, Result, waitMs) );
+end;
+
 procedure TFidoDevice.ForceFido2;
 begin
      Assert( Assigned(fDev), 'error no device assigned');
 
-     fido_dev_force_fido2(fDev);
+     fido_dev_force_fido2( fDev );
 end;
 
 procedure TFidoDevice.ForceU2F;

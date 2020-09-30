@@ -18,7 +18,7 @@ interface
 
 uses
   Windows, Messages, SysUtils, Variants, Classes, Graphics, Controls, Forms,
-  Dialogs, StdCtrls;
+  Dialogs, StdCtrls, ExtCtrls, Fido2;
 
 const cChallangeSize = 32;
 
@@ -41,6 +41,8 @@ type
     btnCreadCredObj: TButton;
     Button2: TButton;
     btnAssertObj: TButton;
+    timPolStatus: TTimer;
+    btnPollTouch: TButton;
     procedure FormCreate(Sender: TObject);
     procedure btnCheckKeyClick(Sender: TObject);
     procedure btnWebAuthVersionClick(Sender: TObject);
@@ -53,6 +55,9 @@ type
     procedure btnCreadCredObjClick(Sender: TObject);
     procedure Button2Click(Sender: TObject);
     procedure btnAssertObjClick(Sender: TObject);
+    procedure btnPollTouchClick(Sender: TObject);
+    procedure FormDestroy(Sender: TObject);
+    procedure timPolStatusTimer(Sender: TObject);
   private
     { Private-Deklarationen }
     fWriteData : boolean;
@@ -61,6 +66,9 @@ type
     fUSBPath : AnsiString;
     fuserId : Array[0..cChallangeSize-1] of byte;
     fcdh : Array[0..cChallangeSize-1] of byte;
+    fTouchIter : integer;
+    fDevList : TFidoDevList;
+
     procedure VerifyCredentials( typ : integer; fmt : PAnsiChar;
               authdataPtr : PByte; authDataLen : integer;
               x509Ptr : PByte; x509Len : integer;
@@ -80,7 +88,7 @@ var
 
 implementation
 
-uses Fido2dll, webauthn, StrUtils, Fido2, authData, cbor;
+uses Fido2dll, webauthn, StrUtils, authData, cbor;
 
 {$R *.dfm}
 
@@ -138,9 +146,40 @@ begin
      InitFidoLogger( onFidoDLLLog );
 end;
 
+procedure TfrmFido2.FormDestroy(Sender: TObject);
+begin
+     fDevList.Free;
+end;
+
 procedure TfrmFido2.onFidoDLLLog(msg: string);
 begin
      memLog.Lines.Add('FidoDll: ' + msg);
+end;
+
+procedure TfrmFido2.timPolStatusTimer(Sender: TObject);
+var status : integer;
+begin
+     timPolStatus.Enabled := False;
+
+     inc(fTouchIter);
+     if fTouchIter > 50 then
+     begin
+          fDevList[0].Cancel;
+          FreeAndNil(fDevList);
+     end
+     else
+     begin
+          status := fDevList[0].GetTouchStatus( 50 );
+          memLog.Lines.Add('Touch Status: ' + IntToStr(status) );
+          if status <> 0 then
+          begin
+               memLog.Lines.Add('Touched');
+               fDevList[0].Cancel;
+               FreeAndNil(fDevList);
+          end
+          else
+              timPolStatus.Enabled := True;
+     end;
 end;
 
 procedure TfrmFido2.VerifyCredentials(typ: integer; fmt: PAnsiChar;
@@ -763,6 +802,24 @@ begin
      finally
             fido_assert_free(fidoAssert);
      end;
+end;
+
+procedure TfrmFido2.btnPollTouchClick(Sender: TObject);
+begin
+     if Assigned(fdevList) then
+        fDevList.Free;
+
+     fdevList := TFidoDevice.DevList;
+
+     if fDevList.Count > 0 then
+     begin
+          fTouchIter := 0;
+          fDevList[0].BeginTouch;
+
+          timPolStatus.Enabled := True;
+     end
+     else
+         FreeAndNil(fDevList);
 end;
 
 procedure TfrmFido2.VerifyAssert(typ: integer; authdata_ptr: PByte;
