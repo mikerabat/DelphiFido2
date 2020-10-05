@@ -18,7 +18,8 @@ unit uWebAuth;
 
 interface
 
-uses SysUtils, Classes, HTTPApp, authData, superobject, WebauthnUtil, Fido2, winCryptRandom;
+uses SysUtils, Classes, {$IF CompilerVersion >= 23.0} Web.HTTPApp {$ELSE} HTTPApp {$ENDIF},
+     authData, superobject, WebauthnUtil, Fido2, winCryptRandom;
 
 type
   TResponseHeaderType = (rtJSON, rtPNG, rtHTML, rtPDF, rtCSV, rtXML, rtBinary, rtZip, rtExe);

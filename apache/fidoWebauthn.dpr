@@ -1,11 +1,21 @@
 library fidoWebauthn;
 
 uses
-  madExcept,
+  {$IF CompilerVersion >= 23.0}
+  {$IFDEF MSWINDOWS}
+  Winapi.ActiveX,
+  System.Win.ComObj,
+  {$ENDIF }
+  Web.WebBroker,
+  Web.ApacheApp,
+  Web.HTTPD24Impl,
+  {$else}
   WebBroker,
-  HTTPD2 in 'HTTPD2.pas',
-  ApacheTwoApp in 'ApacheTwoApp.pas',
-  ApacheTwoHTTP in 'ApacheTwoHTTP.pas',
+  HTTPApp,
+  HTTPD2,
+  ApacheTwoApp,
+  ApacheTwoHTTP,
+  {$ENDIF}
   uWebAuth in 'uWebAuth.pas' {modFidoWebauthn: TWebModule},
   Fido2 in '..\Fido2.pas',
   Fido2dll in '..\Fido2dll.pas',
@@ -23,10 +33,23 @@ uses
 {$E so}
 {$LIBPREFIX 'mod_'}
 
+{$IF CompilerVersion >= 23.0}
+var
+  apache_module: TApacheModuleData;
+exports
+  apache_module name 'webbroker_module';
+{$ELSE}
 exports
   apache_module name 'fido2_module';
+{$ENDIF}
+
 begin
+{$IF CompilerVersion >= 23.0}
+  CoInitFlags := COINIT_MULTITHREADED;
+  Web.ApacheApp.InitApplication(@apache_module);
+{$ELSE}
   Application.Initialize;
+{$ENDIF}
   Application.CreateForm(TmodFidoWebauthn, modFidoWebauthn);
   Application.Run;
 end.
