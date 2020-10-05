@@ -8,7 +8,7 @@ uses
   {$ENDIF }
   Web.WebBroker,
   Web.ApacheApp,
-  Web.HTTPD24Impl,
+  Web.HTTPD22Impl,
   {$else}
   WebBroker,
   HTTPApp,
@@ -37,7 +37,7 @@ uses
 var
   apache_module: TApacheModuleData;
 exports
-  apache_module name 'webbroker_module';
+  apache_module name 'fido2_module';
 {$ELSE}
 exports
   apache_module name 'fido2_module';
