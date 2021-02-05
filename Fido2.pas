@@ -112,6 +112,10 @@ type
     fIsFido2 : boolean;
 
     fCbor : TFido2CBOR;
+    fUVRetryCnt: integer;
+    //fHasUserVerification: boolean;
+    // fSupportUserVerification: boolean;
+    fSupportCredManager: boolean;
 
     procedure OpenDevice;
     procedure CloseDevice;
@@ -132,12 +136,15 @@ type
     property Firmware : string read GetFirmware;
     property USBPath : UTF8String read fUSBPath;
     property RetryCnt : integer read fRetryCnt;
+    property UserVerificatinRetryCount : integer read fUVRetryCnt;
+    //property HasUserVerification : boolean read fHasUserVerification;
     property Protocol : byte read fProtocol;
     property Flags : TFidoDevFlags read fDevFlags;
     property HasPin : boolean read GetHasPin;
     property SupportPin : boolean read fSupportPin;
     property SupportCredProtection : boolean read fSupportCredProtection;
-
+    //property SupportUserVerification : boolean read fSupportUserVerification;
+    property SupportCredManager : boolean read fSupportCredManager;
     property DevHdl : Pfido_dev_t read fDev;
 
     // only valid on fido2 devices
@@ -256,6 +263,7 @@ type
   private
     function GetCredID: TBytes;
     function GetAAGuid: TBytes;
+    function GetCredSigCount: Integer;
   protected
     fCred : Pfido_cred_t;
     fCredType : TFidoCredentialType;
@@ -264,6 +272,7 @@ type
     fRelyingPartyName : string;
     fClientDataHash : TFidoSHA256Hash;      // client data hash
     fEnableHMACSecret : boolean;
+    fHMACSecret: UTF8String;
     fResidentKey : fido_opt_t;              // create a resident key on the device
     fUserIdentification : fido_opt_t;
 
@@ -304,6 +313,7 @@ type
     property UserDisplayName : string read fDisplaNamy write SetDisplayName;
     property Fmt : TFidoCredentialFmt read fFmt write SetFmt;
     property ClientDataHash : TFidoSHA256Hash read fClientDataHash write SetClientDataHash;
+    property SigCount : Integer read GetCredSigCount;
 
     property AAGuid : TBytes read GetAAGuid;
 
@@ -369,6 +379,7 @@ type
     fAssertType : TFidoCredentialType;
 
     fRelyingParty : string;
+    //fHMACSecret : UTF8String;
     fClientHash : TFidoChallenge;              // challange
     fEnableHMACSecret : boolean;
     fUserPresence : fido_opt_t;         // create a resident key on the device
@@ -384,6 +395,7 @@ type
     procedure SetRelParty(const Value: string);
     procedure SetUserIdent(const Value: fido_opt_t);
     procedure SetUserPresence(const Value: fido_opt_t);
+    // procedure SetHMACSecretValue(const Value: UTF8String);
   protected
     procedure InitAssert;
     procedure FreeAssert;
@@ -393,6 +405,7 @@ type
     property AssertType : TFidoCredentialType read fAssertType write SetAssertType;
     property RelyingParty : string read fRelyingParty write SetRelParty;
     property HMACSecretEnabled : boolean read fEnableHMACSecret write SetHMACSecret;
+    //property HMACSecret : UTF8String read fHMACSecret write SetHMACSecretValue;
     property UserVerification : fido_opt_t read fUserVerification write SetUserIdent;
     property Fmt : TFidoCredentialFmt read fFmt write SetFmt;
     property UserPresence : fido_opt_t read fUserPresence write SetUserPresence;
@@ -699,8 +712,12 @@ begin
      fDevMinor := fido_dev_minor(fDev);
      fDevBuild := fido_dev_build(fDev);
      flags := fido_dev_flags(fDev);
+     //fHasUserVerification := fido_dev_has_uv( fDev );
 
-     cr(fido_dev_get_retry_count(fDev, fRetryCnt));
+     if fido_dev_get_retry_count(fDev, fRetryCnt) <> FIDO_OK then
+        fRetryCnt := -1;
+     if fido_dev_get_uv_retry_count(fDev, fUVRetryCnt) <> FIDO_OK then
+        fUVRetryCnt := -1;  // set to -1 in case it is not defined
 
      fDevFlags := [];
      if flags and FIDO_CAP_WINK <> 0 then
@@ -714,6 +731,8 @@ begin
 
      fSupportPin := fido_dev_supports_pin( fDev );
      fSupportCredProtection := fido_dev_supports_cred_prot( fDev );
+     fSupportCredProtection := fido_dev_supports_cred_prot( fDev );
+     //fSupportUserVerification := fido_dev_supports_uv( fDev );
 
      fCBOR := nil;
      if fIsFido2 then
@@ -1109,6 +1128,11 @@ begin
      Result := ptrToByteArr(fido_cred_id_ptr(fCred), fido_cred_id_len(fCred));
 end;
 
+function TBaseFido2Credentials.GetCredSigCount: Integer;
+begin
+     Result := integer( fido_cred_sigcount( fCred ) );
+end;
+
 procedure TBaseFido2Credentials.PrepareCredentials;
 begin
      InitCred;
@@ -1454,6 +1478,7 @@ begin
 
      fRelyingParty := 'localhost';
      fEnableHMACSecret := False;
+     //fHMACSecret := '';
      fAssertType := ctCOSEES256;
      fUserPresence := FIDO_OPT_OMIT;
      fUserVerification := FIDO_OPT_OMIT;
@@ -1478,6 +1503,12 @@ begin
      fEnableHMACSecret := Value;
      UpdateAssert;
 end;
+
+//procedure TBaseFidoAssert.SetHMACSecretValue(const Value: UTF8String);
+//begin
+//     fHMACSecret := Value;
+//     UpdateAssert;
+//end;
 
 procedure TBaseFidoAssert.SetRelParty(const Value: string);
 begin
@@ -1530,6 +1561,11 @@ begin
 
      if Length(fHMacSalt) > 0 then
         cr( fido_assert_set_hmac_salt( fAssert, @fHMacSalt[0], Length(fHMacSalt) ) );
+
+     // hmac secret for testing...
+     // not yet implemented
+     //if fHMACSecret <> '' then
+//        CR( fido_assert_set_hmac_secret( fAssert, 0, PByte(@fHMACSecret[1]), Length(fHMACSecret) ) );
 
      pPin := nil;
      if Length(sPin) > 0 then
@@ -1770,6 +1806,14 @@ var sPin : UTF8String;
 begin
      Result := False;
      ErrMsg := '';
+
+     // ###########################################
+     // #### First check if the device actually supports credential management
+     if not dev.SupportCredManager then
+     begin
+          ErrMsg := 'Device does not support the credential manager API';
+          exit;
+     end;
 
      Clear;
 

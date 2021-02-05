@@ -1089,6 +1089,11 @@ begin
              MemLog.Lines.Add('Vendor: ' + IntToStr(devList[i].vendor));
              MemLog.Lines.Add('Protocol: '  + intToSTr(devList[i].Protocol) );
              MemLog.Lines.Add('Retry cnt: ' + intToStr(devList[i].RetryCnt) );
+             MemLog.Lines.Add('Supports Cred Manager: ' + BoolToStr(devList[i].SupportCredManager, True));
+             MemLog.Lines.Add('Supports Cred Protection: ' + BoolToStr(devList[i].SupportCredProtection, True));
+             //MemLog.Lines.Add('Supports User Verification: ' + BoolToStr(devList[i].SupportUserVerification, True));
+             MemLog.Lines.Add('User verification retry count: ' + IntToStr(devList[i].UserVerificatinRetryCount));
+
 
              if dfWink in devList[i].Flags then
                 MemLog.Lines.Add('Flag wink');

@@ -13,7 +13,7 @@
 // ###################################################################
 
 
-// fido2 dll import file for fido2.dll V 1.5.0 and higher
+// fido2 dll import file for fido2.dll V 1.6.0 and higher
 // the file is basically a conversion of the imported header files of the fido2.dll
 // based on the sources in: https://github.com/Yubico/libfido2
 
@@ -28,6 +28,8 @@ const libFido = 'fido2.dll';
 
 type
   size_t = NativeUInt;
+  fido_sigset_t = Integer;
+  Pfido_sigset_t = ^fido_sigset_t;
   PPAnsiChar = ^PAnsiChar;
 
 // ###########################################
@@ -589,6 +591,7 @@ function fido_dev_info_ptr(devList : Pfido_dev_info_t; n : size_t) : Pfido_dev_i
 function fido_cbor_info_protocols_ptr(ci : Pfido_cbor_info_t) : PByte; cdecl; external libFido;
 function fido_cbor_info_aaguid_ptr(ci : Pfido_cbor_info_t) : PByte; cdecl; external libFido;
 function fido_cred_authdata_ptr(ci : Pfido_cred_t) : PByte; cdecl; external libFido;
+function fido_cred_authdata_raw_ptr(ci : Pfido_cred_t) : PByte; cdecl; external libFido;
 function fido_cred_clientdata_hash_ptr(ci : Pfido_cred_t) : PAnsiChar; cdecl; external libFido;
 function fido_cred_id_ptr(ci : Pfido_cred_t) : PByte; cdecl; external libFido;
 function fido_cred_aaguid_ptr(ci : Pfido_cred_t) : PByte; cdecl; external libFido;
@@ -604,6 +607,7 @@ function fido_assert_set_clientdata_hash(assert : Pfido_assert_t; ptr : PByte; l
 function fido_assert_set_count(assert : Pfido_assert_t; n : size_t) : integer; cdecl; external libFido;
 function fido_assert_set_extensions(assert : Pfido_assert_t; flags : integer) : integer; cdecl; external libFido;
 function fido_assert_set_hmac_salt(assert : Pfido_assert_t; ptr : PByte; len : size_t) : integer; cdecl; external libFido;
+//function fido_assert_set_hmac_secret(assert : Pfido_assert_t; idx : size_t; ptr : PByte; len : size_t) : integer; cdecl; external libFido;
 //function fido_assert_set_options(assert : Pfido_assert_t; bool, bool) __attribute__((__deprecated__)) : integer;
 function fido_assert_set_rp(assert : Pfido_assert_t; id : PAnsiChar) : integer; cdecl; external libFido;
 function fido_assert_set_up(assert : Pfido_assert_t; up : fido_opt_t) : integer; cdecl; external libFido;
@@ -633,11 +637,13 @@ function fido_cred_set_x509(cred : Pfido_cred_t; ptr : PByte; len : size_t) : in
 function fido_cred_set_authdata_raw(cred : Pfido_cred_t; ptr : PByte; len : size_t) : integer; cdecl; external libFido;
 function fido_cred_verify(cred : Pfido_cred_t) : integer; cdecl; external libFido;
 function fido_cred_verify_self( cred : Pfido_cred_t) : integer; cdecl; external libFido;
+function fido_dev_set_sigmask(dev : Pfido_dev_t; sigmask : Pfido_sigset_t) : integer; cdecl; external libFido;
 
 function fido_dev_close(dev : Pfido_dev_t) : integer; cdecl; external libFido;
 function fido_dev_get_assert(dev : Pfido_dev_t; assert : Pfido_assert_t; pin : PAnsiChar) : integer; cdecl; external libFido;
 function fido_dev_get_cbor_info(dev : Pfido_dev_t; ci : Pfido_cbor_info_t) : integer; cdecl; external libFido;
 function fido_dev_get_retry_count(dev : Pfido_dev_t; var retries : Integer) : integer; cdecl; external libFido;
+function fido_dev_get_uv_retry_count(dev : Pfido_dev_t; var retries : integer) : integer; cdecl; external libFido;
 function fido_dev_get_touch_begin(dev : Pfido_dev_t) : integer; cdecl; external libFido;
 function fido_dev_get_touch_status(dev : Pfido_dev_t; var touched : integer; waitMs : integer) : integer; cdecl; external libFido;
 function fido_dev_info_manifest(devlist : Pfido_dev_info_t; ilen : size_t; var olen : Integer) : integer; cdecl; external libFido;
@@ -650,12 +656,17 @@ function fido_dev_set_pin(dev : Pfido_dev_t; pin : PAnsiChar; oldPin : PAnsiChar
 function fido_dev_set_transport_functions(dev : Pfido_dev_t; transFun : Pfido_dev_transport_t) : integer; cdecl; external libFido;
 function fido_dev_cancel(dev : Pfido_dev_t) : integer; cdecl; external libFido;
 function fido_dev_has_pin(dev : Pfido_dev_t) : boolean; cdecl; external libFido;
+// not yet implemented... function fido_dev_has_uv(dev : Pfido_dev_t) : boolean; cdecl; external libFido;
+
 function fido_dev_is_fido2(dev : Pfido_dev_t) : boolean; cdecl; external libFido;
 function fido_dev_supports_pin(dev : Pfido_dev_t) : boolean; cdecl; external libFido;
 function fido_dev_supports_cred_prot(dev : Pfido_dev_t) : boolean; cdecl; external libFido;
+function fido_dev_supports_credman(dev : Pfido_dev_t) : boolean; cdecl; external libFido;
+// not yet implemented... function fido_dev_supports_uv(dev : Pfido_dev_t) : boolean; cdecl; external libFido;
 
 
 function fido_assert_authdata_len(assert : Pfido_assert_t; idx : size_t) : size_t; cdecl; external libFido;
+function fido_cred_authdata_raw_len(cred : Pfido_cred_t) : size_t; cdecl; external libFido;
 function fido_assert_clientdata_hash_len(assert : Pfido_assert_t) : size_t; cdecl; external libFido;
 function fido_assert_count(assert : Pfido_assert_t) : size_t; cdecl; external libFido;
 function fido_assert_hmac_secret_len(assert : Pfido_assert_t; idx : size_t) : size_t; cdecl; external libFido;
@@ -678,6 +689,7 @@ function fido_cred_x5c_len(cred : Pfido_cred_t) : size_t;cdecl; external libFido
 
 function fido_assert_flags(assert : Pfido_assert_t; flags : size_t) : Byte; cdecl; external libFido;
 function fido_cred_flags(cred : Pfido_cred_t) : Byte; cdecl; external libFido;
+function fido_cred_sigcount(cred : Pfido_cred_t) : Longword; cdecl; external libFido;
 function fido_dev_protocol(dev : Pfido_dev_t) : Byte; cdecl; external libFido;
 function fido_dev_major(dev : Pfido_dev_t) : Byte; cdecl; external libFido;
 function fido_dev_minor(dev : Pfido_dev_t) : Byte; cdecl; external libFido;

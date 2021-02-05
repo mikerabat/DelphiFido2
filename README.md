@@ -11,14 +11,14 @@ To get the project running you need to download the Fido.dll from
 
 https://developers.yubico.com/libfido2/Releases/
 
-The current implementation is based on V1.5.0. But please note that the
+The current implementation is based on V1.6.0. But please note that the
 biometrics api is not properly tested due to a lack of a such key here.
 
 There is also a base implementation to check the functionality of the webauthn 
 dll interface. The test project does not create a resident key. It points to 
 fidotest.com which with a bit of change in the hosts file points to localhost.
 
-The project is based on Delphi 2010 and not tested on later versions - due to 
+The project is based on Delphi 2010 and also tested with Delphi 10.4.1 - due to 
 the use of some generics it is also not compatible with older versions.
 
 There are external dependency on SuperObject used to decode and encode JSON.
@@ -28,7 +28,12 @@ and a Delphi CBOR implementation from https://github.com/mikerabat/DelphiCBOR.
 ## Apache module ##
 
 There is now a small project available that allows to integrate the base functionality
-of WebAuthn into an Apache 2.2 server. The project also relies on Indy and OpenSSL functionality for
+of WebAuthn into an Apache 2.2 server. With Delphi 10.4 it is also possible to
+create an Apache 2.4 module. For the newer Delphi versions the default Apache version is 2.4 - to change
+this back to Apache 2.2 rename _Web.HTTPD24Impl_ in _fidoWebauthn.dpr_ project file to
+_Web.HTTPD22Impl_. 
+
+The project also relies on Indy and OpenSSL functionality for
 the SHA-256 hashing so make sure you keep the latest Indy OpenSSL compatible binaries around.
 
 Please note there is only a very simple file based key storage and no device storage implemented so anyone using that

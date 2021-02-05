@@ -8,7 +8,7 @@ uses
   {$ENDIF }
   Web.WebBroker,
   Web.ApacheApp,
-  Web.HTTPD22Impl,
+  Web.HTTPD24Impl,
   {$else}
   WebBroker,
   HTTPApp,
