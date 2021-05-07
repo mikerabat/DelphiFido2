@@ -39,10 +39,17 @@ type
     btnReset: TButton;
     btnCredman: TButton;
     btnCreadCredObj: TButton;
-    Button2: TButton;
+    btnKeyInfo: TButton;
     btnAssertObj: TButton;
     timPolStatus: TTimer;
     btnPollTouch: TButton;
+    chkHMACSecret: TCheckBox;
+    Label1: TLabel;
+    chkCredLargeBlock: TCheckBox;
+    chkResidentKey: TCheckBox;
+    chkVerbose: TCheckBox;
+    edBlob: TEdit;
+    Label2: TLabel;
     procedure FormCreate(Sender: TObject);
     procedure btnCheckKeyClick(Sender: TObject);
     procedure btnWebAuthVersionClick(Sender: TObject);
@@ -53,11 +60,13 @@ type
     procedure btnResetClick(Sender: TObject);
     procedure btnCredmanClick(Sender: TObject);
     procedure btnCreadCredObjClick(Sender: TObject);
-    procedure Button2Click(Sender: TObject);
+    procedure btnKeyInfoClick(Sender: TObject);
     procedure btnAssertObjClick(Sender: TObject);
     procedure btnPollTouchClick(Sender: TObject);
     procedure FormDestroy(Sender: TObject);
     procedure timPolStatusTimer(Sender: TObject);
+    procedure chkVerboseClick(Sender: TObject);
+    procedure edBlobExit(Sender: TObject);
   private
     { Private-Deklarationen }
     fWriteData : boolean;
@@ -68,6 +77,7 @@ type
     fcdh : Array[0..cChallangeSize-1] of byte;
     fTouchIter : integer;
     fDevList : TFidoDevList;
+    fVerbose : boolean;
 
     procedure VerifyCredentials( typ : integer; fmt : PAnsiChar;
               authdataPtr : PByte; authDataLen : integer;
@@ -75,9 +85,9 @@ type
               sigPtr : PByte; sigLen : integer;
               rk : boolean; uv : boolean; ext : integer);
 
-    procedure VerifyAssert(typ : integer; authdata_ptr : PByte; authdata_len : integer;
+    function VerifyAssert(typ : integer; authdata_ptr : PByte; authdata_len : integer;
                            sig_ptr : PByte; sig_len : integer;
-                           ext : integer);
+                           ext : integer) : boolean;
     procedure onFidoDLLLog(msg : string);
   public
     { Public-Deklarationen }
@@ -140,9 +150,10 @@ end;
 procedure TfrmFido2.FormCreate(Sender: TObject);
 begin
      fUserPresence := True;
-     fUserVerification := True;
+     fUserVerification := true;
      fido_init(cFidoInitDebug);
 
+     fVerbose := chkVerbose.Checked;
      InitFidoLogger( onFidoDLLLog );
 end;
 
@@ -153,7 +164,8 @@ end;
 
 procedure TfrmFido2.onFidoDLLLog(msg: string);
 begin
-     memLog.Lines.Add('FidoDll: ' + msg);
+     if fVerbose then
+        memLog.Lines.Add('FidoDll: ' + msg);
 end;
 
 procedure TfrmFido2.timPolStatusTimer(Sender: TObject);
@@ -332,6 +344,22 @@ begin
                          Free;
                   end;
              end;
+
+             if (ext and FIDO_EXT_LARGEBLOB_KEY) <> 0 then
+             begin
+                  if fido_cred_largeblob_key_len( cred ) = 0
+                  then
+                      memLog.Lines.Add('No largeblob found although set in options')
+                  else
+                  begin
+                       with TFileStream.Create(edUsername.Text + '_largeblob.bin', fmCreate or fmOpenWrite) do
+                       try
+                          WriteBuffer( fido_cred_largeblob_key_ptr(cred)^, fido_cred_largeblob_key_len( cred ) );
+                       finally
+                              Free;
+                       end;
+                  end;
+             end;
         end;
 
         memLog.Lines.Add('Finished');
@@ -354,6 +382,7 @@ var credType : integer;
     pin : string;
     aPin : UTF8String;
     dev : Pfido_dev_t;
+    blobData : UTF8String;
 begin
      fWriteData := True;
      if fUSBPath = '' then
@@ -362,15 +391,17 @@ begin
           exit;
      end;
 
-     if not InputQuery( 'PIN', 'Please input fido pin', pin) then
-        exit;
+     if edBlob.Text <> '' then
+        chkResidentKey.Checked := True;
+     ext := 0;
+     if chkHMACSecret.Checked then
+        ext := ext or FIDO_EXT_HMAC_SECRET;
+     if chkCredLargeBlock.Checked then
+        ext := ext or FIDO_EXT_LARGEBLOB_KEY;
+     if edBlob.Text <> '' then
+        ext := ext or FIDO_EXT_CRED_BLOB;
 
-     aPin := UTF8String( pin );
-     ext := 0;  // := FIDO_EXT_HMAC_SECRET;
-
-     cred := fido_cred_new;
-     residentKey := True;
-     userVerification := True;
+     residentKey := chkResidentKey.Checked;
 
      dev := fido_dev_new;
      assert(dev <> nil, 'Error no memory for fido device');
@@ -378,6 +409,13 @@ begin
         r := fido_dev_open(dev, PAnsiChar( fUSBPath ) );
         if r <> FIDO_OK then
            raise Exception.Create('Cannot open device ' + String(fUSBPath));
+
+        userVerification := fido_dev_has_uv(dev);
+        if fido_dev_has_pin( dev ) then
+           if not InputQuery( 'PIN', 'Please input fido pin', pin) then
+              exit;
+
+        aPin := UTF8String( pin );
 
         cred := fido_cred_new;
         if cred = nil then
@@ -419,6 +457,19 @@ begin
            uname := UTF8StrinG( edUsername.Text );
            displName := UTF8StrinG( edDisplayName.Text );
 
+
+           // blob
+           if edBlob.Text <> '' then
+           begin
+                blobData := UTF8String( edBlob.Text );
+                r := fido_cred_set_blob( cred, @blobData[1], Length(blobData) );
+                if r <> FIDO_OK then
+                begin
+                     memLog.Lines.Add( Format('Failed: fido_cred_set_blob: %s (%d)', [String(fido_strerr(r)), r]));
+                     exit;
+                end;
+           end;
+
            r := fido_cred_set_user(cred, @userId[0], sizeof(userId), PAnsiChar( uname ), PAnsiChar(displName), nil );
            if r <> FIDO_OK then
            begin
@@ -446,7 +497,7 @@ begin
            end;
 
            // user verification
-           if userVerification then
+           if userVerification and fido_dev_has_uv( dev ) then
            begin
                 fido_cred_set_uv( cred, FIDO_OPT_TRUE);
                 if r <> FIDO_OK then
@@ -516,6 +567,10 @@ var dev : Pfido_dev_t;
     pinProtoLen : integer;
     retries : integer;
     pGuid1 : PGuid;
+    maxCredCntLst : int64;
+    maxcredidlen : int64;
+    maxcredbloblen : int64;
+    fwversion : int64;
 begin
      if fUSBPath = '' then
      begin
@@ -633,6 +688,15 @@ begin
                    delete(s, Length(s), 1);
                    memLog.Lines.Add('Pin protocols: ' + s);
 
+                   maxCredCntLst := fido_cbor_info_maxcredcntlst(ci);
+                   memLog.Lines.Add('maxCredCntLst: ' + IntToStr( maxCredCntLst) );
+                   maxcredidlen := fido_cbor_info_maxcredidlen(ci);
+                   memLog.Lines.Add('maxcredidlen: ' + IntToStr( maxcredidlen) );
+                   maxcredbloblen := fido_cbor_info_maxcredbloblen(ci);
+                   memLog.Lines.Add('maxcredbloblen: ' + IntToStr( maxcredbloblen) );
+                   fwversion := fido_cbor_info_fwversion(ci);
+                   memLog.Lines.Add('fwversion: ' + IntToStr( fwversion) );
+
                 finally
                        fido_cbor_info_free(ci);
                 end;
@@ -712,6 +776,7 @@ var dev : Pfido_dev_t;
     pin : string;
     typ : integer;
     ext : integer;
+    assertCnt : integer;
 begin
      if fUSBPath = '' then
      begin
@@ -719,12 +784,14 @@ begin
           exit;
      end;
 
-     if not InputQuery( 'PIN', 'Please input fido pin', pin) then
-        exit;
-
      ext := 0;
+     if chkHMACSecret.Checked then
+        ext := ext or FIDO_EXT_HMAC_SECRET;
+     if chkCredLargeBlock.Checked then
+        ext := ext or FIDO_EXT_LARGEBLOB_KEY;
+
      typ := COSE_ES256;
-     sPin := AnsiString( pin );
+     pin := '';
 
      for i := 0 to cChallangeSize - 1 do
          fcdh[i] := Byte( Random(High(byte) + 1) );
@@ -740,6 +807,12 @@ begin
            r := fido_dev_open(dev, PAnsiChar( fUSBPath ) );
            if r <> FIDO_OK then
               raise Exception.Create('Cannot open device ' + String(fUSBPath));
+
+           if fido_dev_has_pin(dev) then
+              if not InputQuery( 'PIN', 'Please input fido pin', pin) then
+                 exit;
+
+           sPin := AnsiString( pin );
 
            // client data hash
            r := fido_assert_set_clientdata_hash(fidoAssert, @fcdh[0], length(fcdh));
@@ -781,7 +854,7 @@ begin
            r := fido_dev_get_assert( dev, fidoAssert, PAnsiChar(sPin) );
            if r <> FIDO_OK then
            begin
-                memLog.Lines.Add( Format('Failed: fido_assert_set_uv: %s (%d)', [String(fido_strerr(r)), r]));
+                memLog.Lines.Add( Format('Failed: fido_dev_get_assert: %s (%d)', [String(fido_strerr(r)), r]));
                 exit;
            end;
 
@@ -790,15 +863,29 @@ begin
                fido_dev_free(dev);
         end;
 
-        if fido_assert_count(fidoAssert) <> 1 then
-        begin
-             memLog.Lines.Add( 'fido assert count : ' + intToStr(fido_assert_count(fidoAssert) )
+        assertCnt := fido_assert_count(fidoAssert);
+        memLog.Lines.Add( 'fido assert count : ' + intToStr( assertCnt )
                                       + ' signatures returned');
-             exit;
+
+        while assertCnt > 0 do
+        begin
+             memLog.Lines.Add('Checking index ' + IntToStr(assertCnt - 1));
+
+             if VerifyAssert( typ, fido_assert_authdata_ptr(fidoAssert, assertCnt - 1),
+                              fido_assert_authdata_len(fidoAssert, assertCnt - 1),
+                              fido_assert_sig_ptr(fidoAssert, assertCnt - 1),
+                              fido_assert_sig_len(fidoAssert, assertCnt - 1), ext )
+             then
+                 break;
+
+             dec(assertCnt);
         end;
 
-        VerifyAssert( typ, fido_assert_authdata_ptr(fidoAssert, 0), fido_assert_authdata_len(fidoAssert, 0),
-                      fido_assert_sig_ptr(fidoAssert, 0), fido_assert_sig_len(fidoAssert, 0), ext );
+        if assertCnt > 0
+        then
+            memLog.Lines.Add('Success on item nr ' + IntToStr(assertCnt))
+        else
+            memLog.Lines.Add('Assertion failed');
      finally
             fido_assert_free(fidoAssert);
      end;
@@ -822,15 +909,16 @@ begin
          FreeAndNil(fDevList);
 end;
 
-procedure TfrmFido2.VerifyAssert(typ: integer; authdata_ptr: PByte;
+function TfrmFido2.VerifyAssert(typ: integer; authdata_ptr: PByte;
   authdata_len: integer; sig_ptr: PByte; sig_len: integer;
-  ext: integer);
+  ext: integer) : boolean;
 var pk : Pes256_pk_t;
     pkBuf : TBytes;
     pkFs : string;
     r : integer;
     fidoassert : Pfido_assert_t;
 begin
+     Result := False;
      pkFs := edUsername.Text + '_pk.bin';
      if not FileExists(pkFs) then
      begin
@@ -939,7 +1027,19 @@ begin
                 exit;
            end;
 
+           Result := True;
            memLog.Lines.Add('verify ok');
+
+           // ###########################################
+           // #### Fetch blob
+           if chkCredLargeBlock.Checked then
+           begin
+                if fido_assert_largeblob_key_len(fidoAssert, 0) > 0
+                then
+                    memLog.Lines.Add( Base64URLEncode(fido_assert_largeblob_key_ptr(fidoassert, 0), fido_assert_largeblob_key_len(fidoAssert, 0)) )
+                else
+                    memLog.Lines.Add('No largeblob data');
+           end;
         finally
                fido_assert_free(fidoAssert);
         end;
@@ -1046,7 +1146,11 @@ begin
              cred := TFidoCredCreate.Create;
              try
                 cred.CreateRandomUid(64);
-                cred.ResidentKey := FIDO_OPT_TRUE;
+                if chkResidentKey.Checked
+                then
+                    cred.ResidentKey := FIDO_OPT_TRUE
+                else
+                    cred.ResidentKey := FIDO_OPT_FALSE;
                 cred.UserIdentification := FIDO_OPT_TRUE;
                 cred.UserName := edUsername.Text;
                 cred.UserDisplayName := edDisplayName.Text;
@@ -1071,7 +1175,7 @@ begin
 
 end;
 
-procedure TfrmFido2.Button2Click(Sender: TObject);
+procedure TfrmFido2.btnKeyInfoClick(Sender: TObject);
 var devList : TFidoDevList;
     i,j : Integer;
 begin
@@ -1091,9 +1195,8 @@ begin
              MemLog.Lines.Add('Retry cnt: ' + intToStr(devList[i].RetryCnt) );
              MemLog.Lines.Add('Supports Cred Manager: ' + BoolToStr(devList[i].SupportCredManager, True));
              MemLog.Lines.Add('Supports Cred Protection: ' + BoolToStr(devList[i].SupportCredProtection, True));
-             //MemLog.Lines.Add('Supports User Verification: ' + BoolToStr(devList[i].SupportUserVerification, True));
+             MemLog.Lines.Add('Supports User Verification: ' + BoolToStr(devList[i].SupportUserVerification, True));
              MemLog.Lines.Add('User verification retry count: ' + IntToStr(devList[i].UserVerificatinRetryCount));
-
 
              if dfWink in devList[i].Flags then
                 MemLog.Lines.Add('Flag wink');
@@ -1116,11 +1219,33 @@ begin
 
                   memLog.Lines.Add('Versions: ' + devList[i].CBOR.Versions.CommaText );
                   memLog.Lines.Add('Extensions: ' + devList[i].CBOR.Extensions.CommaText );
+
+                  memLog.Lines.Add('Cred protect: ' + BoolToStr(devList[i].SupportCredProtection, True));
+                  memLog.Lines.Add('User verification support: ' + BoolToStr(devList[i].SupportUserVerification, True));
+                  memLog.Lines.Add('Pin support: ' + BoolToStr(devList[i].SupportPin, True));
+                  memLog.Lines.Add('Credential manager support: ' + BoolToStr(devList[i].SupportCredManager, True));
+
+                  memLog.Lines.Add('MaxBlobLen: ' + IntTostr(devList[i].CBOR.maxBlobLen) );
+                  memLog.Lines.Add('FWVersion: ' + IntTostr(devList[i].CBOR.FWVersion) );
+                  memLog.Lines.Add('MaxCredCntList: ' + IntTostr(devList[i].CBOR.MaxCredCntList) );
+                  memLog.Lines.Add('MaxCredIDLen: ' + IntTostr(devList[i].CBOR.MaxCredIDLen) );
+                  memLog.Lines.Add('Blob Support: ' + BoolToStr(devList[i].HasBlobSupport, True ) );
              end;
         end;
      finally
             devList.Free;
      end;
+end;
+
+procedure TfrmFido2.chkVerboseClick(Sender: TObject);
+begin
+     fVerbose := chkVerbose.Checked;
+end;
+
+procedure TfrmFido2.edBlobExit(Sender: TObject);
+begin
+     if edBlob.Text <> '' then
+        chkResidentKey.Checked := True;
 end;
 
 procedure TfrmFido2.btnAssertObjClick(Sender: TObject);
@@ -1166,7 +1291,7 @@ begin
 
                         for i := 0 to cnt - 1 do
                         begin
-                             res := verify.Verify( assert.AuthData[i], assert.Sig[i] );
+                             res := verify.Verify( assert.AuthData[i], assert.Sig[i], assert.Extensions );
 
                              memLog.Lines.Add(IntToStr( i + 1) + ': Verify returned: ' + BoolToStr( res, True ) );
                              if not res then
@@ -1186,8 +1311,6 @@ begin
      finally
             devList.Free;
      end;
-
-
 end;
 
 end.

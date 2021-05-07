@@ -16,7 +16,7 @@ unit Fido2;
 
 interface
 
-uses SysUtils, Classes, Fido2dll, Generics.Collections;
+uses SysUtils, Classes, Fido2dll, Generics.Collections, cbor;
 
 type
   EFidoBaseException = class(Exception);
@@ -37,6 +37,8 @@ type
   TFidoSHA256Hash = Array[0..31] of byte;
 
   TFidoLogMsg = procedure(msg : string) of Object;
+
+const cMaxSmallBlobLen = 32;
 
 // ###################################################
 // #### Encapsulation of the fido_cbor_xxx functions
@@ -61,6 +63,10 @@ type
     fCBOROptions : Array of TFido2CBOROption;
     fCBORPinProtocols : TBytes;
     fCBORmaxMsgSize : UInt64;
+    fCBORMaxCredCntLst : UInt64;
+    fCBORMaxCredidlen : UInt64;
+    fCBORMaxBlobLen : UInt64;
+    fCBORFWVersion : UInt64;
 
     procedure ReadProperties( dev : PFido_dev_t );
     function GetOption(index: integer): TFido2CBOROption;
@@ -73,6 +79,10 @@ type
     property Versions : TStringList read fCBORVersions;
     property Extensions : TStringList read fCBORExtension;
     property PinProtocols : TBytes read fCBORPinProtocols;
+    property MaxBlobLen : UInt64 read fCBORMaxBlobLen;
+    property FWVersion : UInt64 read fCBORFWVersion;
+    property MaxCredCntList : UInt64 read fCBORMaxCredCntLst;
+    property MaxCredIDLen : UInt64 read fCBORMaxCredidlen;
 
     function UUIDToGuid : String;
 
@@ -113,14 +123,18 @@ type
 
     fCbor : TFido2CBOR;
     fUVRetryCnt: integer;
-    //fHasUserVerification: boolean;
-    // fSupportUserVerification: boolean;
+    fHasUserVerification: boolean;
+    fSupportUserVerification: boolean;
     fSupportCredManager: boolean;
+    fHasBlobSupport: boolean;
 
     procedure OpenDevice;
     procedure CloseDevice;
     function GetFirmware: string;
     function GetHasPin: boolean;
+    function GetLargeBlobRaw: TBytes;
+    function GetLargeBlob: TCborItem;
+    function GetLargeBlobKey(key: TBytes): TBytes;
   protected
     procedure ReadProperties(di : Pfido_dev_info_t);
     procedure ReadDev;
@@ -137,19 +151,28 @@ type
     property USBPath : UTF8String read fUSBPath;
     property RetryCnt : integer read fRetryCnt;
     property UserVerificatinRetryCount : integer read fUVRetryCnt;
-    //property HasUserVerification : boolean read fHasUserVerification;
+    property HasUserVerification : boolean read fHasUserVerification;
     property Protocol : byte read fProtocol;
     property Flags : TFidoDevFlags read fDevFlags;
     property HasPin : boolean read GetHasPin;
     property SupportPin : boolean read fSupportPin;
     property SupportCredProtection : boolean read fSupportCredProtection;
-    //property SupportUserVerification : boolean read fSupportUserVerification;
+    property SupportUserVerification : boolean read fSupportUserVerification;
     property SupportCredManager : boolean read fSupportCredManager;
     property DevHdl : Pfido_dev_t read fDev;
 
     // only valid on fido2 devices
     property CBOR : TFido2CBOR read FCBOR;
     property IsFido2 : boolean read fIsFido2;
+    property HasBlobSupport : boolean read fHasBlobSupport;
+
+    property LargeBlobRaw : TBytes read GetLargeBlobRaw;
+    property LargeBlobArr : TCborItem read GetLargeBlob;
+    property LargeBlob[ key : TBytes ] : TBytes read GetLargeBlobKey;
+
+    procedure SetLargeBlobArr( data : TBytes; pin : string ); overload;
+    procedure SetLargeBlob( key, data : TBytes; pin : string );
+    procedure SetLargeBlobArr( cborData : TCborItem; pin : string ); overload;
 
     procedure ForceFido2;
     procedure ForceU2F;
@@ -264,6 +287,7 @@ type
     function GetCredID: TBytes;
     function GetAAGuid: TBytes;
     function GetCredSigCount: Integer;
+    procedure SetLargeBlobFlag(const Value: boolean);
   protected
     fCred : Pfido_cred_t;
     fCredType : TFidoCredentialType;
@@ -275,6 +299,8 @@ type
     fHMACSecret: UTF8String;
     fResidentKey : fido_opt_t;              // create a resident key on the device
     fUserIdentification : fido_opt_t;
+    fLargeBlockKeyFlag : boolean;
+    fSmallBlob : TBytes;
 
     // user identification
     fUserName, fDisplaNamy : string;
@@ -307,6 +333,7 @@ type
     property RelyingPartyName : string read fRelyingPartyName write SetRelPartyName;
     property RelyingParty : string read fRelyingParty write SetRelParty;
     property HMACSecretEnabled : boolean read fEnableHMACSecret write SetHMACSecret;
+    property LargeBlobEnabled : boolean read fLargeBlockKeyFlag write SetLargeBlobFlag;
     property ResidentKey : fido_opt_t read fResidentKey write SetResidentKey;
     property UserIdentification : fido_opt_t read fUserIdentification write SetUserIdent;
     property UserName : string read fUserName write SetUserName;
@@ -319,6 +346,8 @@ type
 
     procedure CreateRandomUid( len : integer );
     procedure SetUserId( uid : TBytes );
+    procedure SetLargeBlockKeyFlag( value : boolean );
+    procedure SetSmallBlob( data : TBytes );
 
     procedure SavePKToStream( stream : TStream );
     procedure SavePKToFile( fn : String );
@@ -330,6 +359,9 @@ type
     procedure SaveSigToStream( stream : TStream );
     procedure SaveX5cToFile( fn : string );
     procedure SaveX5cToStream( stream : TStream );
+    procedure SaveBlob( fn : string );
+    procedure SaveBlobToStream( stream : TStream );
+
 
     // converts the webauthn object described here https://www.w3.org/TR/webauthn/#authenticator-data
     // -> basically converts to a raw cbor encoded bytes string
@@ -359,6 +391,9 @@ type
   public
     function Verify( ClientDataHash : TFidoSHA256Hash ) : boolean;
 
+    // extract the large blob data (2.1 feature)
+    function LargeBlobKey : TBytes;
+
     // copies the verification data from already generated credentials (e.g. CreateCredentials)
     constructor Create( fromCred : TBaseFido2Credentials); overload;
 
@@ -366,7 +401,8 @@ type
     constructor Create( typ: TFidoCredentialType; fmt: TFidoCredentialFmt;
                         aRelyingPartyID, aRelyingPartyName : string;
                         authData : TBytes;
-                        x509 : TBytes; Sig : TBytes; rk, uv : boolean; ext : integer); overload;
+                        x509 : TBytes; Sig : TBytes; rk, uv : boolean;
+                        ext : integer; smallBlob : TBytes); overload;
     destructor Destroy; override;
   end;
 
@@ -379,11 +415,11 @@ type
     fAssertType : TFidoCredentialType;
 
     fRelyingParty : string;
-    //fHMACSecret : UTF8String;
-    fClientHash : TFidoChallenge;              // challange
+    fHMACSecret : UTF8String;
+    fClientHash : TFidoChallenge;       // challange
     fEnableHMACSecret : boolean;
-    fUserPresence : fido_opt_t;         // create a resident key on the device
-    fUserVerification : fido_opt_t;  //
+    fUserPresence : fido_opt_t;
+    fUserVerification : fido_opt_t;     //
 
     // user identification
     fFmt : TFidoCredentialFmt;
@@ -395,7 +431,7 @@ type
     procedure SetRelParty(const Value: string);
     procedure SetUserIdent(const Value: fido_opt_t);
     procedure SetUserPresence(const Value: fido_opt_t);
-    // procedure SetHMACSecretValue(const Value: UTF8String);
+    procedure SetHMACSecretValue(const Value: UTF8String);
   protected
     procedure InitAssert;
     procedure FreeAssert;
@@ -405,12 +441,11 @@ type
     property AssertType : TFidoCredentialType read fAssertType write SetAssertType;
     property RelyingParty : string read fRelyingParty write SetRelParty;
     property HMACSecretEnabled : boolean read fEnableHMACSecret write SetHMACSecret;
-    //property HMACSecret : UTF8String read fHMACSecret write SetHMACSecretValue;
+    property HMACSecret : UTF8String read fHMACSecret write SetHMACSecretValue;
     property UserVerification : fido_opt_t read fUserVerification write SetUserIdent;
     property Fmt : TFidoCredentialFmt read fFmt write SetFmt;
     property UserPresence : fido_opt_t read fUserPresence write SetUserPresence;
     property ClientDataHash : TFidoChallenge read fClientHash write fClientHash;
-
     procedure CreateRandomCID;
 
     constructor Create;
@@ -422,14 +457,20 @@ type
   private
     fErr : string;
     fHMacSalt : TBytes;
+    fExtensions: integer;
     function GetAuthData( idx : integer ): TBytes;
     function GetSig( idx : integer ): TBytes;
     function GetHMAC(idx: integer): TBytes;
+    function GetLargeBlob( idx : integer ): TBytes;
+    function GetSmallBlob( idx : integer ): TBytes;
   public
     property ErrorMsg : string read fErr;
     property AuthData[ idx : integer] : TBytes read GetAuthData;
     property Sig[ idx : integer ] : TBytes read GetSig;
     property HMACSecret[ idx : integer ] : TBytes read GetHMAC;
+    property LargeBlob[ idx : Integer ] : TBytes read GetLargeBlob;
+    property Blob[ idx : integer ] : TBytes read GetSmallBlob;
+    property Extensions : integer read fExtensions;
 
     procedure AddAllowedCredential( cred : TBaseFido2Credentials );
     procedure SetHMACSecretSalt( salt : TBytes );
@@ -459,7 +500,7 @@ type
     procedure LoadPKFromStream( stream : TStream );
     procedure LoadPKFromFile( fn : string );
 
-    function Verify( authData : TBytes; sig : TBytes ) : boolean;
+    function Verify( authData : TBytes; sig : TBytes; ext : integer = 0 ) : boolean;
 
     constructor Create;
     destructor Destroy; override;
@@ -546,8 +587,6 @@ type
 procedure InitFidoLogger( OnLog : TFidoLogMsg );
 
 implementation
-
-uses cbor;
 
 // ###########################################
 // #### Fido logging
@@ -712,7 +751,7 @@ begin
      fDevMinor := fido_dev_minor(fDev);
      fDevBuild := fido_dev_build(fDev);
      flags := fido_dev_flags(fDev);
-     //fHasUserVerification := fido_dev_has_uv( fDev );
+     fHasUserVerification := fido_dev_has_uv( fDev );
 
      if fido_dev_get_retry_count(fDev, fRetryCnt) <> FIDO_OK then
         fRetryCnt := -1;
@@ -731,12 +770,63 @@ begin
 
      fSupportPin := fido_dev_supports_pin( fDev );
      fSupportCredProtection := fido_dev_supports_cred_prot( fDev );
-     fSupportCredProtection := fido_dev_supports_cred_prot( fDev );
-     //fSupportUserVerification := fido_dev_supports_uv( fDev );
+     fSupportCredManager := fido_dev_supports_credman( fDev );
+     fSupportUserVerification := fido_dev_supports_uv( fDev );
 
      fCBOR := nil;
+     fHasBlobSupport := False;
+
      if fIsFido2 then
-        fCbor := TFido2CBOR.Create( fDev );
+     begin
+          fCbor := TFido2CBOR.Create( fDev );
+          // as per mail with pedro martelletto
+          fHasBlobSupport := fCbor.Extensions.IndexOf('credBlob') >= 0 ;  // ?!? better check for "largeBlobs" options as stated in fido 2.1 client to authenticator protocol
+     end;
+end;
+
+procedure TFidoDevice.SetLargeBlob(key, data: TBytes; pin: string);
+var ansiPin : Utf8String;
+begin
+     assert( Assigned( fDev ), 'Error no device opened');
+     assert( (Length(key) > 0) and (length(data) > 0), 'Error no data');
+     if not fHasBlobSupport then
+        raise EFidoPropertyException.Create('Error: blobs not supported by this device');
+
+     ansiPin := UTF8String( pin );
+     CR( fido_dev_largeblob_set( fDev, @key[0], Length(key), @data[0], Length(data), PAnsiChar( ansiPin ) ) );
+end;
+
+procedure TFidoDevice.SetLargeBlobArr(cborData: TCborItem; pin: string);
+var data : TMemoryStream;
+    ansiPin : Utf8String;
+begin
+     assert( Assigned( fDev ), 'Error no device opened' );
+     assert( Assigned( cborData ), 'Error no cbor item' );
+     if not fHasBlobSupport then
+        raise EFidoPropertyException.Create('Error: blobs not supported by this device');
+
+     data := TMemoryStream.Create;
+     try
+        cborData.CBOREncode(data);
+        ansiPin := UTF8String( pin );
+
+        CR( fido_dev_largeblob_set_array( fDev, data.Memory, data.Size, PAnsiChar(ansiPin) ) );
+     finally
+            data.Free;
+     end;
+end;
+
+procedure TFidoDevice.SetLargeBlobArr(data: TBytes; pin: string);
+var ansiPin : Utf8String;
+begin
+     assert( Assigned( fDev ), 'Error no device opened');
+     assert( (length(data) > 0), 'Error no data');
+
+     if not fHasBlobSupport then
+        raise EFidoPropertyException.Create('Error: blobs not supported by this device');
+
+     ansiPin := UTF8String( pin );
+     CR( fido_dev_largeblob_set_array( fDev, @data[0], Length(data), PAnsiChar( ansiPin ) ) );
 end;
 
 function TFidoDevice.SetPin(oldPin, newPin: string; var ErrStr : string): boolean;
@@ -882,6 +972,12 @@ begin
         SetLength( fCBORPinProtocols, pinProtoLen);
         if pinProtoLen > 0 then
            Move( pinProto^, fCBORPinProtocols[0], pinProtoLen);
+
+
+        fCBORMaxCredCntLst := fido_cbor_info_maxcredcntlst(ci);
+        fCBORMaxCredidlen := fido_cbor_info_maxcredidlen(ci);
+        fCBORMaxBlobLen := fido_cbor_info_maxcredbloblen(ci);
+        fCBORFWVersion := fido_cbor_info_fwversion(ci);
      finally
             fido_cbor_info_free(ci);
      end;
@@ -992,10 +1088,17 @@ begin
 
      // set extension
      ext := 0;
+     if fLargeBlockKeyFlag then
+        ext := ext or FIDO_EXT_LARGEBLOB_KEY;
      if fEnableHMACSecret then
-        ext := FIDO_EXT_HMAC_SECRET;
+        ext := ext or FIDO_EXT_HMAC_SECRET;
+     if Length(fSmallBlob) > 0 then
+        ext := ext or FIDO_EXT_CRED_BLOB;
 
      CR( fido_cred_set_extensions( fcred,  ext ) );
+
+     if Length(fSmallBlob) > 0 then
+        CR( fido_cred_set_blob( fcred, @fSmallBlob[0], Length(fSmallBlob) ) );
 
      // resident key
      CR( fido_cred_set_rk( fcred, fResidentKey ) );
@@ -1052,6 +1155,18 @@ begin
      UpdateCredentials;
 end;
 
+procedure TBaseFido2Credentials.SetLargeBlobFlag(const Value: boolean);
+begin
+     fLargeBlockKeyFlag := Value;
+     UpdateCredentials;
+end;
+
+procedure TBaseFido2Credentials.SetLargeBlockKeyFlag(value: boolean);
+begin
+     fLargeBlockKeyFlag := value;
+     UpdateCredentials;
+end;
+
 procedure TBaseFido2Credentials.SetRelParty(const Value: string);
 begin
      fRelyingParty := Value;
@@ -1067,6 +1182,16 @@ end;
 procedure TBaseFido2Credentials.SetResidentKey(const Value: fido_opt_t);
 begin
      fResidentKey := Value;
+     UpdateCredentials;
+end;
+
+procedure TBaseFido2Credentials.SetSmallBlob(data: TBytes);
+begin
+     if Length(data) > cMaxSmallBlobLen then
+        raise EFidoPropertyException.Create('Blob length exceeds maximum size of ' + IntToStr(cMaxSmallBlobLen));
+     fSmallBlob := data;
+     fResidentKey := FIDO_OPT_TRUE;
+
      UpdateCredentials;
 end;
 
@@ -1235,6 +1360,40 @@ begin
         stream.WriteBuffer( pData^, idLen );
 end;
 
+procedure TBaseFido2Credentials.SaveBlob(fn: string);
+var fs : TFileStream;
+begin
+     if fCred = nil then
+        raise EFidoPropertyException.Create('No credentials');
+
+     if not fLargeBlockKeyFlag then
+        raise EFidoPropertyException.Create('Large blob flag not set - cannot save');
+
+     fs := TFileStream.Create( fn, fmCreate );
+     try
+        SaveBlobToStream( fs );
+     finally
+            fs.Free;
+     end;
+end;
+
+procedure TBaseFido2Credentials.SaveBlobToStream(stream: TStream);
+var blobLen : integer;
+    pBlob : PByte;
+begin
+     if fCred = nil then
+        raise EFidoPropertyException.Create('No credentials');
+
+     if not fLargeBlockKeyFlag then
+        raise EFidoPropertyException.Create('Large blob flag not set - cannot save');
+
+     blobLen := fido_cred_largeblob_key_len( fCred );
+     pBlob := fido_cred_largeblob_key_ptr( fCred );
+
+     if (blobLen > 0) and (pBlob <> nil) then
+        stream.WriteBuffer(pBlob^, blobLen);
+end;
+
 // #########################################################
 // ####
 // #########################################################
@@ -1288,7 +1447,7 @@ end;
 constructor TFidoCredVerify.Create(typ: TFidoCredentialType; fmt: TFidoCredentialFmt;
   aRelyingPartyID, aRelyingPartyName : string;
   authData, x509, Sig: TBytes;
-  rk, uv: boolean; ext: integer);
+  rk, uv: boolean; ext: integer; smallBlob : TBytes);
 begin
      inherited Create;
 
@@ -1310,7 +1469,9 @@ begin
      else
          fUserIdentification := FIDO_OPT_FALSE;
 
-     fEnableHMACSecret := ext = FIDO_EXT_HMAC_SECRET;
+     fEnableHMACSecret := (ext and FIDO_EXT_HMAC_SECRET) <> 0;
+     fLargeBlockKeyFlag := (ext and FIDO_EXT_LARGEBLOB_KEY) <> 0;
+     fSmallBlob := Copy( smallBlob, 0, Length(smallBlob) );
 end;
 
 constructor TFidoCredVerify.Create(fromCred: TBaseFido2Credentials);
@@ -1332,6 +1493,8 @@ begin
      fRelyingParty := fromCred.fRelyingParty;
      fRelyingPartyName := fromCred.fRelyingPartyName;
      fEnableHMACSecret := fromCred.fEnableHMACSecret;
+     fLargeBlockKeyFlag := fromCred.fLargeBlockKeyFlag;
+     fSmallBlob := Copy(fromCred.fSmallBlob, 0, Length(fromCred.fSmallBlob));
 
      // authdata
      fAuthData := ptrToByteArr(fido_cred_authdata_ptr(fromCred.fCred), fido_cred_authdata_len(fromCred.fcred));
@@ -1346,6 +1509,11 @@ end;
 destructor TFidoCredVerify.Destroy;
 begin
      inherited;
+end;
+
+function TFidoCredVerify.LargeBlobKey: TBytes;
+begin
+     Result := ptrToByteArr( fido_cred_largeblob_key_ptr(fCred), fido_cred_largeblob_key_len(fCred));
 end;
 
 // #########################################################
@@ -1504,11 +1672,11 @@ begin
      UpdateAssert;
 end;
 
-//procedure TBaseFidoAssert.SetHMACSecretValue(const Value: UTF8String);
-//begin
-//     fHMACSecret := Value;
-//     UpdateAssert;
-//end;
+procedure TBaseFidoAssert.SetHMACSecretValue(const Value: UTF8String);
+begin
+     fHMACSecret := Value;
+     UpdateAssert;
+end;
 
 procedure TBaseFidoAssert.SetRelParty(const Value: string);
 begin
@@ -1562,10 +1730,19 @@ begin
      if Length(fHMacSalt) > 0 then
         cr( fido_assert_set_hmac_salt( fAssert, @fHMacSalt[0], Length(fHMacSalt) ) );
 
+     fExtensions := 0;
+     if fEnableHMACSecret then
+        fExtensions := fExtensions or FIDO_EXT_HMAC_SECRET;
+
      // hmac secret for testing...
-     // not yet implemented
-     //if fHMACSecret <> '' then
-//        CR( fido_assert_set_hmac_secret( fAssert, 0, PByte(@fHMACSecret[1]), Length(fHMACSecret) ) );
+     if fHMACSecret <> '' then
+        CR( fido_assert_set_hmac_secret( fAssert, 0, PByte(@fHMACSecret[1]), Length(fHMACSecret) ) );
+
+     // blob support
+     if dev.HasBlobSupport then
+        fExtensions := FIDO_EXT_LARGEBLOB_KEY or FIDO_EXT_CRED_BLOB;
+
+     CR( fido_assert_set_extensions( fAssert, fExtensions ) );
 
      pPin := nil;
      if Length(sPin) > 0 then
@@ -1595,10 +1772,22 @@ begin
      Result := ptrToByteArr( fido_assert_sig_ptr( fAssert, idx ), fido_assert_sig_len( fAssert, idx) );
 end;
 
+function TFidoAssert.GetSmallBlob(idx : integer): TBytes;
+begin
+     assert( Assigned( fAssert ), 'No Assert handle aquired -> call perform first');
+     Result := ptrToByteArr( fido_assert_blob_ptr(fAssert, idx), fido_assert_blob_len(fAssert, idx));
+end;
+
 function TFidoAssert.GetHMAC(idx: integer): TBytes;
 begin
      assert( Assigned( fAssert ), 'No Assert handle aquired -> call perform first');
      Result := ptrToByteArr( fido_assert_hmac_secret_ptr( fAssert, idx ), fido_assert_hmac_secret_len( fAssert, idx ) );
+end;
+
+function TFidoAssert.GetLargeBlob( idx : integer ): TBytes;
+begin
+     assert( Assigned( fAssert ), 'No Assert handle aquired -> call perform first');
+     Result := ptrToByteArr( fido_assert_largeblob_key_ptr(fAssert, idx), fido_assert_largeblob_key_len(fAssert, idx));
 end;
 
 procedure TFidoAssert.SetHMACSecretSalt(salt: TBytes);
@@ -1633,7 +1822,7 @@ begin
         stream.ReadBuffer(fPK[0], len);
 end;
 
-function TFidoAssertVerify.Verify(authData, sig: TBytes): boolean;
+function TFidoAssertVerify.Verify(authData, sig: TBytes; ext : integer = 0): boolean;
 var r : integer;
 begin
      if Length(authData) = 0 then
@@ -1653,6 +1842,12 @@ begin
      InitAssert;
      try
         UpdateAssert;
+
+        // hmac secret for testing...
+        if fHMACSecret <> '' then
+           CR( fido_assert_set_hmac_secret( fAssert, 0, PByte(@fHMACSecret[1]), Length(fHMACSecret) ) );
+
+        CR( fido_assert_set_extensions( fAssert, ext ) );
 
         // authdata
         CR( fido_assert_set_count(fAssert, 1) );   // todo
@@ -1679,9 +1874,9 @@ begin
 
      case fAssertType of
        ctCOSEES256: begin
-                          fpk1 := es256_pk_new;
-                          assert(Assigned(fpk1), 'Memory allocation form es256 failed');
-                          CR( es256_pk_from_ptr( fpk1, @fPK[0], Length(fPK) ) );
+                         fpk1 := es256_pk_new;
+                         assert(Assigned(fpk1), 'Memory allocation form es256 failed');
+                         CR( es256_pk_from_ptr( fpk1, @fPK[0], Length(fPK) ) );
                     end;
        ctCoseEDDSA: begin
                          fpk2 := eddsa_pk_new;
@@ -1989,6 +2184,50 @@ begin
      Assert( Assigned(fDev), 'error no device assigned');
 
      Result := fido_dev_has_pin( fDev );
+end;
+
+function TFidoDevice.GetLargeBlob: TCborItem;
+var cborPtr : PByte;
+    cborLen : size_t;
+begin
+     Assert( Assigned(fDev), 'error no device assigned');
+     Result := nil;
+
+     if not fHasBlobSupport then
+        raise EFidoPropertyException.Create('Error: blobs not supported by this device');
+
+     CR( fido_dev_largeblob_get_array( fDev, cborPtr, cborLen ) );
+     if cborLen > 0 then
+        Result := TCborDecoding.DecodeData(cborPtr, cborLen);
+end;
+
+function TFidoDevice.GetLargeBlobKey(key: TBytes): TBytes;
+var blobPtr : PByte;
+    blobLen : size_t;
+begin
+     Assert( Assigned(fDev), 'error no device assigned');
+     Assert( Length(key) > 0, 'Error no key defined');
+     Result := nil;
+
+     if not fHasBlobSupport then
+        raise EFidoPropertyException.Create('Error: blobs not supported by this device');
+
+     CR( fido_dev_largeblob_get( fDev, @key[0], Length(key), blobPtr, blobLen) );
+
+     Result := ptrToByteArr(blobPtr, blobLen);
+end;
+
+function TFidoDevice.GetLargeBlobRaw: TBytes;
+var cborPtr : PByte;
+    cborLen : size_t;
+begin
+     Assert( Assigned(fDev), 'error no device assigned');
+
+     if not fHasBlobSupport then
+        raise EFidoPropertyException.Create('Error: blobs not supported by this device');
+
+     CR( fido_dev_largeblob_get_array( fDev, cborPtr, cborLen ) );
+     Result := ptrToByteArr(cborPtr, cborLen);
 end;
 
 function TFidoDevice.GetTouchStatus(waitMs: integer): integer;

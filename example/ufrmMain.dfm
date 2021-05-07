@@ -2,7 +2,7 @@ object frmFido2: TfrmFido2
   Left = 0
   Top = 0
   Caption = 'FIDO 2'
-  ClientHeight = 335
+  ClientHeight = 374
   ClientWidth = 580
   Color = clBtnFace
   Font.Charset = DEFAULT_CHARSET
@@ -37,6 +37,20 @@ object frmFido2: TfrmFido2
     Width = 60
     Height = 13
     Caption = 'Displayname'
+  end
+  object Label1: TLabel
+    Left = 42
+    Top = 336
+    Width = 41
+    Height = 13
+    Caption = 'Options:'
+  end
+  object Label2: TLabel
+    Left = 217
+    Top = 344
+    Width = 96
+    Height = 13
+    Caption = 'Blob Data (32Bytes)'
   end
   object btnCheckKey: TButton
     Left = 8
@@ -142,14 +156,14 @@ object frmFido2: TfrmFido2
     TabOrder = 11
     OnClick = btnCreadCredObjClick
   end
-  object Button2: TButton
+  object btnKeyInfo: TButton
     Left = 344
     Top = 110
     Width = 89
     Height = 25
     Caption = 'Key Info'
     TabOrder = 12
-    OnClick = Button2Click
+    OnClick = btnKeyInfoClick
   end
   object btnAssertObj: TButton
     Left = 344
@@ -168,6 +182,48 @@ object frmFido2: TfrmFido2
     Caption = 'Poll Touch'
     TabOrder = 14
     OnClick = btnPollTouchClick
+  end
+  object chkHMACSecret: TCheckBox
+    Left = 97
+    Top = 320
+    Width = 97
+    Height = 17
+    Caption = 'HMAC Secret'
+    TabOrder = 15
+  end
+  object chkCredLargeBlock: TCheckBox
+    Left = 97
+    Top = 343
+    Width = 97
+    Height = 17
+    Caption = 'Cred Large Blob'
+    TabOrder = 16
+  end
+  object chkResidentKey: TCheckBox
+    Left = 217
+    Top = 320
+    Width = 97
+    Height = 17
+    Caption = 'Resident Key'
+    TabOrder = 17
+  end
+  object chkVerbose: TCheckBox
+    Left = 376
+    Top = 15
+    Width = 97
+    Height = 17
+    Caption = 'Verbose logging'
+    TabOrder = 18
+    OnClick = chkVerboseClick
+  end
+  object edBlob: TEdit
+    Left = 320
+    Top = 341
+    Width = 121
+    Height = 21
+    MaxLength = 32
+    TabOrder = 19
+    OnExit = edBlobExit
   end
   object timPolStatus: TTimer
     Enabled = False
