@@ -411,6 +411,8 @@ type
 // ######################################################
   TBaseFidoAssert = class(TObject)
   private
+    fErr : string;
+
     fAssert : Pfido_assert_t;
     fAssertType : TFidoCredentialType;
 
@@ -438,6 +440,7 @@ type
 
     procedure UpdateAssert; virtual;
   public
+    property ErrorMsg : string read fErr;
     property AssertType : TFidoCredentialType read fAssertType write SetAssertType;
     property RelyingParty : string read fRelyingParty write SetRelParty;
     property HMACSecretEnabled : boolean read fEnableHMACSecret write SetHMACSecret;
@@ -455,7 +458,6 @@ type
 // client side that performs the assertion on the key
   TFidoAssert = class(TBaseFidoAssert)
   private
-    fErr : string;
     fHMacSalt : TBytes;
     fExtensions: integer;
     function GetAuthData( idx : integer ): TBytes;
@@ -464,7 +466,6 @@ type
     function GetLargeBlob( idx : integer ): TBytes;
     function GetSmallBlob( idx : integer ): TBytes;
   public
-    property ErrorMsg : string read fErr;
     property AuthData[ idx : integer] : TBytes read GetAuthData;
     property Sig[ idx : integer ] : TBytes read GetSig;
     property HMACSecret[ idx : integer ] : TBytes read GetHMAC;
@@ -481,8 +482,6 @@ type
   // verification e.g. on the server
   TFidoAssertVerify = class(TBaseFidoAssert)
   private
-    fErr : string;
-
     fPK : TBytes;
     fpk1 : Pes256_pk_t;
     fpk2 : Peddsa_pk_t;
@@ -494,7 +493,6 @@ type
     function GetKeyPtr : Pointer;
     procedure SetPK(const Value: TBytes);
   public
-    property ErrorMsg : string read fErr;
     property PK : TBytes read fPK write SetPK;
 
     procedure LoadPKFromStream( stream : TStream );
