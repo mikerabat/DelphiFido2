@@ -158,6 +158,8 @@ begin
 
      fVerbose := chkVerbose.Checked;
      InitFidoLogger( onFidoDLLLog );
+
+     InitDevCombo;
 end;
 
 procedure TfrmFido2.FormDestroy(Sender: TObject);
