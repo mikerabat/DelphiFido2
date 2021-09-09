@@ -50,6 +50,7 @@ type
     chkVerbose: TCheckBox;
     edBlob: TEdit;
     Label2: TLabel;
+    cboDevs: TComboBox;
     procedure FormCreate(Sender: TObject);
     procedure btnCheckKeyClick(Sender: TObject);
     procedure btnWebAuthVersionClick(Sender: TObject);
@@ -79,6 +80,8 @@ type
     fDevList : TFidoDevList;
     fVerbose : boolean;
 
+    procedure InitDevCombo;
+    function GetSelDevCombo( devList : TFidoDevList ) : TFidoDevice;
     procedure VerifyCredentials( typ : integer; fmt : PAnsiChar;
               authdataPtr : PByte; authDataLen : integer;
               x509Ptr : PByte; x509Len : integer;
@@ -162,6 +165,46 @@ begin
      fDevList.Free;
 end;
 
+function TfrmFido2.GetSelDevCombo(devList: TFidoDevList): TFidoDevice;
+var idx : integer;
+    productInfo : string;
+begin
+     productInfo := cboDevs.Text;
+     Result := nil;
+
+     // check shortcut
+     if (cboDevs.ItemIndex >= 0) and (devList.Count = cboDevs.Items.Count) and (devList[cboDevs.ItemIndex].ProductInfo = productInfo) then
+     begin
+          Result := devList[cboDevs.ItemIndex];
+     end
+     else
+     begin
+          for idx := 0 to devList.Count - 1 do
+          begin
+               if devList[idx].ProductInfo = productInfo then
+               begin
+                    Result := devList[idx];
+                    break;
+               end;
+          end;
+     end;
+end;
+
+procedure TfrmFido2.InitDevCombo;
+var devList : TFidoDevList;
+    i : integer;
+begin
+     cboDevs.Clear;
+
+     devList := TFidoDevice.DevList;
+     try
+        for i := 0 to devList.Count - 1 do
+            cboDevs.AddItem(devList[i].ProductInfo, nil);
+     finally
+            devList.Free;
+     end;
+end;
+
 procedure TfrmFido2.onFidoDLLLog(msg: string);
 begin
      if fVerbose then
@@ -170,23 +213,32 @@ end;
 
 procedure TfrmFido2.timPolStatusTimer(Sender: TObject);
 var status : integer;
+    dev : TFidoDevice;
 begin
      timPolStatus.Enabled := False;
+
+     dev := GetSelDevCombo(fDevList);
+
+     if dev = nil then
+     begin
+          FreeAndNil(fDevList);
+          exit;
+     end;
 
      inc(fTouchIter);
      if fTouchIter > 50 then
      begin
-          fDevList[0].Cancel;
+          dev.Cancel;
           FreeAndNil(fDevList);
      end
      else
      begin
-          status := fDevList[0].GetTouchStatus( 50 );
+          status := dev.GetTouchStatus( 50 );
           memLog.Lines.Add('Touch Status: ' + IntToStr(status) );
           if status <> 0 then
           begin
                memLog.Lines.Add('Touched');
-               fDevList[0].Cancel;
+               dev.Cancel;
                FreeAndNil(fDevList);
           end
           else
@@ -608,6 +660,7 @@ begin
            flagsTxt := flagsTxt + ifthen((flags and FIDO_CAP_NMSG) <> 0, 'nomsg,', 'msg,');
 
            memLog.Lines.Add('$' + IntToHex(flags, 2) + ': ' + flagsTxt);
+           memLog.Lines.Add('Is WinHello: ' + BoolToStr(fido_dev_is_winhello( dev ), True));
 
            if fido_dev_is_fido2( dev ) then
            begin
@@ -892,16 +945,18 @@ begin
 end;
 
 procedure TfrmFido2.btnPollTouchClick(Sender: TObject);
+var dev : TFidoDevice;
 begin
      if Assigned(fdevList) then
         fDevList.Free;
 
      fdevList := TFidoDevice.DevList;
 
-     if fDevList.Count > 0 then
+     dev := GetSelDevCombo(fdevlist);
+     if dev <> nil then
      begin
           fTouchIter := 0;
-          fDevList[0].BeginTouch;
+          dev.BeginTouch;
 
           timPolStatus.Enabled := True;
      end
@@ -1089,27 +1144,29 @@ end;
 
 procedure TfrmFido2.btnCredmanClick(Sender: TObject);
 var devList : TFidoDevList;
-    cnt: Integer;
     pin : string;
     errStr : string;
     credMan : TFido2CredentialManager;
+    dev : TFidoDevice;
 begin
      devList := TFidoDevice.DevList;
      assert(assigned(devList), 'error no device found');
 
      try
         memLog.Lines.Add(IntTostr(devList.Count) + ' devices found');
-        for cnt := 0 to devList.Count - 1 do
-        begin
-             memLog.Lines.Add('Device V' + devList[cnt].Firmware);
+        dev := GetSelDevCombo(devList);
 
-             if devList[cnt].IsFido2 then
+        if dev <> nil then
+        begin
+             memLog.Lines.Add('Device V' + dev.Firmware);
+
+             if dev.IsFido2 then
              begin
                   if not InputQuery( 'Pin', 'Input then new Pin', Pin) then
-                     continue;
+                     exit;
                   credman := TFido2CredentialManager.Create;
                   try
-                     if credman.Open( devList[cnt], pin, errStr) then
+                     if credman.Open( dev, pin, errStr) then
                      begin
                           memLog.Lines.Add('Num remaining keys: ' + IntToStr( credman.NumResidentKeysRemain ) );
                           memLog.Lines.Add('Num RK keys: ' + inttostr( credman.NumResidentKeys ) );
@@ -1134,11 +1191,14 @@ procedure TfrmFido2.btnCreadCredObjClick(Sender: TObject);
 var devList : TFidoDevList;
     cred : TFidoCredCreate;
     pin : string;
+    dev : TFidoDevice;
 begin
      devList := TFidoDevice.DevList;
 
      try
-        if devList.Count > 0 then
+        dev := GetSelDevCombo(devList);
+
+        if dev <> nil then
         begin
              if not InputQuery( 'PIN', 'Please input fido pin', pin) then
                 exit;
@@ -1146,6 +1206,14 @@ begin
              cred := TFidoCredCreate.Create;
              try
                 cred.CreateRandomUid(64);
+                if chkResidentKey.Checked = False then
+                begin
+                     if MessageDlg('Resident key option not set - assertion may fail...' + #13#10 +
+                                   'Do you want to set the option?', mtConfirmation, [mbYes, mbNo], -1) = mrYes
+                     then
+                         chkResidentKey.Checked := True;
+                end;
+
                 if chkResidentKey.Checked
                 then
                     cred.ResidentKey := FIDO_OPT_TRUE
@@ -1156,7 +1224,7 @@ begin
                 cred.UserDisplayName := edDisplayName.Text;
 
                 // use defaults for the rest
-                if cred.CreateCredentialsAndVerify(devList[0], pin) then
+                if cred.CreateCredentialsAndVerify(dev, pin) then
                 begin
                      memLog.Lines.Add('Credentials created');
                      cred.SavePKToFile( cred.UserName + '_obj_pk.bin' );
@@ -1177,60 +1245,71 @@ end;
 
 procedure TfrmFido2.btnKeyInfoClick(Sender: TObject);
 var devList : TFidoDevList;
-    i,j : Integer;
+    j : Integer;
+    dev : TFidoDevice;
 begin
      devList := TFidoDevice.DevList;
-
+     if devList.Count <> cboDevs.Items.Count then
+        InitDevCombo;
      try
         memLog.Lines.Add('Found ' + inttoStr(devList.Count) + ' keys');
+        dev := GetSelDevCombo(devList);
 
-        for i := 0 to devList.Count - 1 do
+        if dev = nil then
         begin
-             MemLog.Lines.Add('Serial: ' + devList[i].Firmware);
-             MemLog.Lines.Add('ManufactStr: ' + devList[i].ManufactStr);
-             MemLog.Lines.Add('ProductInfo: ' + devList[i].ProductInfo);
-             MemLog.Lines.Add('Product: ' + IntTostr(devList[i].Product));
-             MemLog.Lines.Add('Vendor: ' + IntToStr(devList[i].vendor));
-             MemLog.Lines.Add('Protocol: '  + intToSTr(devList[i].Protocol) );
-             MemLog.Lines.Add('Retry cnt: ' + intToStr(devList[i].RetryCnt) );
-             MemLog.Lines.Add('Supports Cred Manager: ' + BoolToStr(devList[i].SupportCredManager, True));
-             MemLog.Lines.Add('Supports Cred Protection: ' + BoolToStr(devList[i].SupportCredProtection, True));
-             MemLog.Lines.Add('Supports User Verification: ' + BoolToStr(devList[i].SupportUserVerification, True));
-             MemLog.Lines.Add('User verification retry count: ' + IntToStr(devList[i].UserVerificatinRetryCount));
+             memLog.Lines.Add('No device selected');
+             exit;
+        end;
 
-             if dfWink in devList[i].Flags then
-                MemLog.Lines.Add('Flag wink');
-             if dfCBOR in devList[i].Flags then
-                MemLog.Lines.Add('Flag CBOR');
-             if dfMSg in devList[i].Flags then
-                MemLog.Lines.Add('Flag Msg');
+        MemLog.Lines.Add('Serial: ' + dev.Firmware);
+        MemLog.Lines.Add('ManufactStr: ' + dev.ManufactStr);
+        MemLog.Lines.Add('ProductInfo: ' + dev.ProductInfo);
+        MemLog.Lines.Add('Product: ' + IntTostr(dev.Product));
+        MemLog.Lines.Add('Vendor: ' + IntToStr(dev.vendor));
+        MemLog.Lines.Add('Protocol: '  + intToSTr(dev.Protocol) );
+        MemLog.Lines.Add('Retry cnt: ' + intToStr(dev.RetryCnt) );
+        MemLog.Lines.Add('Supports Cred Manager: ' + BoolToStr(dev.SupportCredManager, True));
+        MemLog.Lines.Add('Supports Cred Protection: ' + BoolToStr(dev.SupportCredProtection, True));
+        MemLog.Lines.Add('Supports User Verification: ' + BoolToStr(dev.SupportUserVerification, True));
+        MemLog.Lines.Add('User verification retry count: ' + IntToStr(dev.UserVerificatinRetryCount));
+        MemLog.Lines.Add('Is WinHello: ' + BoolToStr(dev.IsWinHello, True));
 
-             memLog.Lines.Add( 'is Fido2: ' + BoolToStr( devList[i].IsFido2, True ) );
-             if devList[i].CBOR <> nil then
+        if dfWink in dev.Flags then
+           MemLog.Lines.Add('Flag wink');
+        if dfCBOR in dev.Flags then
+           MemLog.Lines.Add('Flag CBOR');
+        if dfMSg in dev.Flags then
+           MemLog.Lines.Add('Flag Msg');
+
+        memLog.Lines.Add( 'is Fido2: ' + BoolToStr( dev.IsFido2, True ) );
+        if dev.CBOR <> nil then
+        begin
+             memLog.Lines.Add('MaxMsgSize: ' + IntToStr(dev.CBOR.MaxMsgSize));
+             memLog.Lines.Add('UUID: ' + dev.CBOR.UUIDToGuid);
+
+             memLog.Lines.Add('Options:' );
+             for j := 0 to dev.CBOR.OptionsCnt - 1 do
              begin
-                  memLog.Lines.Add('MaxMsgSize: ' + IntToStr(devList[i].CBOR.MaxMsgSize));
-                  memLog.Lines.Add('UUID: ' + devList[i].CBOR.UUIDToGuid);
-
-                  memLog.Lines.Add('Options:' );
-                  for j := 0 to devList[i].CBOR.OptionsCnt - 1 do
-                  begin
-                       memLog.Lines.Add(devList[i].CBOR.Options[j].Name + ': ' + boolToStr( devList[i].CBOR.Options[j].Value, True ) );
-                  end;
-
-                  memLog.Lines.Add('Versions: ' + devList[i].CBOR.Versions.CommaText );
-                  memLog.Lines.Add('Extensions: ' + devList[i].CBOR.Extensions.CommaText );
-
-                  memLog.Lines.Add('Cred protect: ' + BoolToStr(devList[i].SupportCredProtection, True));
-                  memLog.Lines.Add('User verification support: ' + BoolToStr(devList[i].SupportUserVerification, True));
-                  memLog.Lines.Add('Pin support: ' + BoolToStr(devList[i].SupportPin, True));
-                  memLog.Lines.Add('Credential manager support: ' + BoolToStr(devList[i].SupportCredManager, True));
-
-                  memLog.Lines.Add('MaxBlobLen: ' + IntTostr(devList[i].CBOR.maxBlobLen) );
-                  memLog.Lines.Add('FWVersion: ' + IntTostr(devList[i].CBOR.FWVersion) );
-                  memLog.Lines.Add('MaxCredCntList: ' + IntTostr(devList[i].CBOR.MaxCredCntList) );
-                  memLog.Lines.Add('MaxCredIDLen: ' + IntTostr(devList[i].CBOR.MaxCredIDLen) );
-                  memLog.Lines.Add('Blob Support: ' + BoolToStr(devList[i].HasBlobSupport, True ) );
+                  memLog.Lines.Add(dev.CBOR.Options[j].Name + ': ' + boolToStr( dev.CBOR.Options[j].Value, True ) );
              end;
+
+             memLog.Lines.Add('Cose algorithms:' + IntToStr(dev.CBOR.CoseAlgorithmCnt));
+             for j := 0 to dev.CBOR.CoseAlgorithmCnt - 1 do
+                 memLog.Lines.Add(IntToStr(dev.CBOR.CoseAlgorithms[j]));
+
+             memLog.Lines.Add('Versions: ' + dev.CBOR.Versions.CommaText );
+             memLog.Lines.Add('Extensions: ' + dev.CBOR.Extensions.CommaText );
+
+             memLog.Lines.Add('Cred protect: ' + BoolToStr(dev.SupportCredProtection, True));
+             memLog.Lines.Add('User verification support: ' + BoolToStr(dev.SupportUserVerification, True));
+             memLog.Lines.Add('Pin support: ' + BoolToStr(dev.SupportPin, True));
+             memLog.Lines.Add('Credential manager support: ' + BoolToStr(dev.SupportCredManager, True));
+
+             memLog.Lines.Add('MaxBlobLen: ' + IntTostr(dev.CBOR.maxBlobLen) );
+             memLog.Lines.Add('FWVersion: ' + IntTostr(dev.CBOR.FWVersion) );
+             memLog.Lines.Add('MaxCredCntList: ' + IntTostr(dev.CBOR.MaxCredCntList) );
+             memLog.Lines.Add('MaxCredIDLen: ' + IntTostr(dev.CBOR.MaxCredIDLen) );
+             memLog.Lines.Add('Blob Support: ' + BoolToStr(dev.HasBlobSupport, True ) );
         end;
      finally
             devList.Free;
@@ -1257,13 +1336,16 @@ var devList : TFidoDevList;
     cnt : integer;
     res : boolean;
     pin : string;
+    dev : TFidoDevice;
 begin
      devList := TFidoDevice.DevList;
 
      try
         memLog.Lines.Add('Found ' + inttoStr(devList.Count) + ' keys');
 
-        if devList.Count > 0 then
+        dev := GetSelDevCombo(devList);
+
+        if dev <> nil then
         begin
              if not InputQuery( 'PIN', 'Please input fido pin', pin) then
                 exit;
@@ -1275,7 +1357,7 @@ begin
                 assert.Fmt := fmFido2;
                 assert.CreateRandomCID;
 
-                assertRes := assert.Perform( devList[0], pin, cnt);
+                assertRes := assert.Perform( dev, pin, cnt);
                 memLog.Lines.Add( Format('Perform returned: %s, with cnt: %d' , [BoolToStr( assertRes, True), cnt] ) );
 
                 if assertRes then
@@ -1307,7 +1389,6 @@ begin
                     assert.Free;
              end;
         end;
-
      finally
             devList.Free;
      end;

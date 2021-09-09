@@ -13,7 +13,7 @@
 // ###################################################################
 
 
-// fido2 dll import file for fido2.dll V 1.7.0 and higher
+// fido2 dll import file for fido2.dll V 1.8.0 and higher
 // the file is basically a conversion of the imported header files of the fido2.dll
 // based on the sources in: https://github.com/Yubico/libfido2
 
@@ -295,6 +295,7 @@ type
   fido_user_t = fido_user;
 
   fido_cred = packed record
+    cd : fido_blob_t;            // client data
 	   cdh : fido_blob_t;           // client data hash
 	   rp : fido_rp_t;              // relying party
 	   user : fido_user_t;          // user entity
@@ -342,6 +343,7 @@ type
 
   fido_assert = packed record
    rp_id : PAnsiChar;          // relying party id
+   cd : fido_blob_t;           // client data
 	  cdh : fido_blob_t;          // client data hash
 	  allow_list : fido_blob_array_t;   // list of allowed credentials
 	  up : fido_opt_t;            // user presence
@@ -372,13 +374,28 @@ type
   end;
   fido_byte_array_t = fido_byte_array;
 
+  fido_algo = packed record
+    typ : PAnsiChar;
+    cose : integer;
+  end;
+  fido_algo_t = fido_algo;
+  Pfido_algo_t = ^fido_algo_t;
+
+  fido_algo_array = packed record
+    ptr : Pfido_algo_t;
+    len : size_t;
+  end;
+  fido_algo_array_t = fido_algo_array;
+
   fido_cbor_info = packed record
 	   versions : fido_str_array_t;   // supported versions: fido2|u2f
 	   extensions : fido_str_array_t; // list of supported extensions
+    transports : fido_str_array_t; // list of supported transports
     aaguid : Array[0..15] of Byte; // aaguid
 	   options : fido_opt_array_t;    // list of supported options
 	   maxmsgsiz : UInt64;            // maximum message size
 	   protocols : fido_byte_array_t; // supported pin protocols
+    algorithms : fido_algo_array_t;// list of supported algorithms
     maxcredcntlst : Uint64;        // max number of credentials in list
 	   maxcredidlen : Uint64;         // max credential ID length
     fwversion : UINT64;            // firmware version
@@ -468,7 +485,7 @@ type
 // #### fido\err.h
 // ###########################################
 
-const 	FIDO_ERR_SUCCESS		= $00;
+const  FIDO_ERR_SUCCESS		= $00;
        FIDO_ERR_INVALID_COMMAND	= $01;
        FIDO_ERR_INVALID_PARAMETER	= $02;
        FIDO_ERR_INVALID_LENGTH		= $03;
@@ -600,12 +617,14 @@ function fido_assert_blob_ptr(assert : Pfido_assert_t; idx : size_t) : PByte; cd
 
 function fido_cbor_info_extensions_ptr(ci : Pfido_cbor_info_t) : PPAnsiChar; cdecl; external libFido;
 function fido_cbor_info_options_name_ptr(ci : Pfido_cbor_info_t) : PPAnsiChar; cdecl; external libFido;
+function fido_cbor_info_transports_ptr(ci : Pfido_cbor_info_t) : PPAnsiChar; cdecl; external libFido;
 function fido_cbor_info_versions_ptr(ci : Pfido_cbor_info_t) : PPAnsiChar; cdecl; external libFido;
 function fido_cbor_info_options_value_ptr(ci : Pfido_cbor_info_t) : PBoolean; cdecl; external libFido;
 function fido_assert_rp_id(assert : Pfido_assert_t) : PAnsiChar; cdecl; external libFido;
 function fido_assert_user_display_name(assert : Pfido_assert_t; idx : size_t) : PAnsiChar; cdecl; external libFido;
 function fido_assert_user_icon(assert : Pfido_assert_t; idx : size_t) : PAnsiChar; cdecl; external libFido;
 function fido_assert_user_name(assert : Pfido_assert_t; idx : size_t) : PAnsiChar; cdecl; external libFido;
+function fido_cbor_info_algorithm_type(ci : Pfido_cbor_info_t; idx : size_t) : PAnsiChar; cdecl; external libFido;
 function fido_cred_display_name(cred_p : Pfido_cred_t) : PAnsiChar; cdecl; external libFido;
 function fido_cred_fmt(cred_p : Pfido_cred_t) : PAnsiChar; cdecl; external libFido;
 function fido_cred_rp_id(cred_p : Pfido_cred_t) : PAnsiChar; cdecl; external libFido;
@@ -643,7 +662,9 @@ function fido_assert_set_up(assert : Pfido_assert_t; up : fido_opt_t) : integer;
 function fido_assert_set_uv(assert : Pfido_assert_t; uv : fido_opt_t) : integer; cdecl; external libFido;
 function fido_assert_set_sig(assert : Pfido_assert_t; idx : size_t; ptr : PByte; len : size_t) : integer; cdecl; external libFido;
 function fido_assert_verify(assert : Pfido_assert_t; idx : size_t; cose_alg : integer; pk : Pointer) : integer; cdecl; external libFido;
+function fido_cbor_info_algorithm_cose(ci : Pfido_cbor_info_t; idx : size_t) : integer; cdecl; external libFido;
 function fido_assert_set_authdata_raw(assert : Pfido_assert_t; idx : size_t; ptr : PByte; len : size_t) : integer; cdecl; external libFido;
+function fido_assert_set_clientdata(assert : Pfido_assert_t; ptr : PAnsiChar; len : size_t): integer; cdecl; external libFido;
 function fido_assert_sigcount(assert : Pfido_assert_t; idx : size_t): UInt32; cdecl; external libFido;
 
 
@@ -653,6 +674,7 @@ function fido_cred_set_authdata(cred : Pfido_cred_t; ptr : PByte; len : size_t) 
 function fido_cred_set_clientdata_hash(cred : Pfido_cred_t; ptr : PByte; len : size_t) : integer; cdecl; external libFido;
 function fido_cred_set_extensions(cred : Pfido_cred_t; flags : integer) : integer; cdecl; external libFido;
 function fido_cred_set_fmt(cred : Pfido_cred_t; ptr : PAnsiChar) : integer; cdecl; external libFido;
+function fido_cred_set_id(cred : Pfido_cred_t; ptr : PAnsiChar; len : size_t) : integer; cdecl; external libFido;
 // function fido_cred_set_options(cred : Pfido_cred_t; bool, bool) __attribute__((__deprecated__)) : integer;
 function fido_cred_set_prot( cred : Pfido_cred_t; prot : integer) : integer; cdecl; external libFido;
 function fido_cred_set_rk(cred : Pfido_cred_t; rk : fido_opt_t) : integer; cdecl; external libFido;
@@ -665,6 +687,7 @@ function fido_cred_set_user(cred : Pfido_cred_t; user_id : PByte; user_id_len : 
 function fido_cred_set_x509(cred : Pfido_cred_t; ptr : PByte; len : size_t) : integer; cdecl; external libFido;
 function fido_cred_set_authdata_raw(cred : Pfido_cred_t; ptr : PByte; len : size_t) : integer; cdecl; external libFido;
 function fido_cred_set_blob(cred : Pfido_cred_t; data : PByte; len : size_t) : integer; cdecl; external libFido;
+function fido_cred_set_clientdata(cred : Pfido_cred_t; ptr : PAnsiChar; len : size_t) : integer; cdecl; external libFido;
 
 function fido_cred_verify(cred : Pfido_cred_t) : integer; cdecl; external libFido;
 function fido_cred_verify_self( cred : Pfido_cred_t) : integer; cdecl; external libFido;
@@ -690,6 +713,7 @@ function fido_dev_has_pin(dev : Pfido_dev_t) : boolean; cdecl; external libFido;
 function fido_dev_has_uv(dev : Pfido_dev_t) : boolean; cdecl; external libFido;
 
 function fido_dev_is_fido2(dev : Pfido_dev_t) : boolean; cdecl; external libFido;
+function fido_dev_is_winhello(dev : Pfido_dev_t) : boolean; cdecl; external libFido;
 function fido_dev_supports_pin(dev : Pfido_dev_t) : boolean; cdecl; external libFido;
 function fido_dev_supports_cred_prot(dev : Pfido_dev_t) : boolean; cdecl; external libFido;
 function fido_dev_supports_credman(dev : Pfido_dev_t) : boolean; cdecl; external libFido;
@@ -714,10 +738,12 @@ function fido_assert_sig_len(assert : Pfido_assert_t; idx : size_t) : size_t; cd
 function fido_assert_user_id_len(assert : Pfido_assert_t; idx : size_t) : size_t; cdecl; external libFido;
 function fido_assert_blob_len(assert : Pfido_assert_t; idx : size_t) : size_t; cdecl; external libFido;
 
-function fido_cbor_info_aaguid_len(ci : Pfido_cbor_info_t) : size_t;cdecl; external libFido;
+function fido_cbor_info_aaguid_len(ci : Pfido_cbor_info_t) : size_t; cdecl; external libFido;
+function fido_cbor_info_algorithm_count(ci : Pfido_cbor_info_t) : size_t; cdecl; external libFido;
 function fido_cbor_info_extensions_len(ci : Pfido_cbor_info_t) : size_t;cdecl; external libFido;
 function fido_cbor_info_options_len(ci : Pfido_cbor_info_t) : size_t;cdecl; external libFido;
 function fido_cbor_info_protocols_len(ci : Pfido_cbor_info_t) : size_t;cdecl; external libFido;
+function fido_cbor_info_transports_len(ci : Pfido_cbor_info_t) : size_t;cdecl; external libFido;
 function fido_cbor_info_versions_len(ci : Pfido_cbor_info_t) : size_t;cdecl; external libFido;
 function fido_cred_authdata_len(cred : Pfido_cred_t) : size_t;cdecl; external libFido;
 function fido_cred_clientdata_hash_len(cred : Pfido_cred_t) : size_t;cdecl; external libFido;
@@ -849,6 +875,7 @@ function fido_credman_rp_new : Pfido_credman_rp_t; cdecl; external libFido;
 function fido_credman_del_dev_rk(dev : Pfido_dev_t; cred_id : PByte; cred_id_len : size_t; pin : PAnsiChar) : integer; cdecl; external libFido;
 function fido_credman_get_dev_metadata(dev : Pfido_dev_t; metaData : Pfido_credman_metadata_t; pin : PAnsiChar) : integer; cdecl; external libFido;
 function fido_credman_get_dev_rk(dev : Pfido_dev_t; rp_id : PAnsiChar; rk : Pfido_credman_rk_t; pin : PAnsiChar) : integer; cdecl; external libFido;
+function fido_credman_set_dev_rk(dev : Pfido_dev_t; cred : Pfido_cred_t; pin : PAnsiChar) : integer; cdecl; external libFido;
 function fido_credman_get_dev_rp(dev : Pfido_dev_t; rp : Pfido_credman_rp_t; pin : PAnsiChar) : integer; cdecl; external libFido;
 
 function fido_credman_rk_count(rk : Pfido_credman_rk_t) : size_t; cdecl; external libFido;

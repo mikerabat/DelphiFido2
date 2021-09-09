@@ -107,7 +107,7 @@ object frmFido2: TfrmFido2
   object edUsername: TEdit
     Left = 424
     Top = 48
-    Width = 121
+    Width = 148
     Height = 21
     TabOrder = 6
     Text = 'test'
@@ -115,7 +115,7 @@ object frmFido2: TfrmFido2
   object edDisplayName: TEdit
     Left = 424
     Top = 75
-    Width = 121
+    Width = 148
     Height = 21
     TabOrder = 7
     Text = 'Tester'
@@ -158,7 +158,7 @@ object frmFido2: TfrmFido2
   end
   object btnKeyInfo: TButton
     Left = 344
-    Top = 110
+    Top = 126
     Width = 89
     Height = 25
     Caption = 'Key Info'
@@ -225,11 +225,19 @@ object frmFido2: TfrmFido2
     TabOrder = 19
     OnExit = edBlobExit
   end
+  object cboDevs: TComboBox
+    Left = 448
+    Top = 128
+    Width = 124
+    Height = 21
+    Style = csDropDownList
+    TabOrder = 20
+  end
   object timPolStatus: TTimer
     Enabled = False
     Interval = 50
     OnTimer = timPolStatusTimer
-    Left = 536
-    Top = 112
+    Left = 512
+    Top = 328
   end
 end

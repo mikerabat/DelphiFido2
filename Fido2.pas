@@ -58,8 +58,10 @@ type
   private
     fCBORVersions : TStringList;
     fCBORExtension : TStringList;
+    fCBORTransports : TStringList;
     fCBORUUID : TBytes;
     fCBORGuid : string;
+    fCBORCose : Array of integer;
     fCBOROptions : Array of TFido2CBOROption;
     fCBORPinProtocols : TBytes;
     fCBORmaxMsgSize : UInt64;
@@ -71,6 +73,8 @@ type
     procedure ReadProperties( dev : PFido_dev_t );
     function GetOption(index: integer): TFido2CBOROption;
     function GetOptionsCnt: integer;
+    function GetCoseAlgorithm(index: integer): integer;
+    function GetCoseAlgorithmCnt: integer;
   public
     property MaxMsgSize : UInt64 read fCBORmaxMsgSize;
     property UUID : TBytes read fCBORUUID;
@@ -83,6 +87,9 @@ type
     property FWVersion : UInt64 read fCBORFWVersion;
     property MaxCredCntList : UInt64 read fCBORMaxCredCntLst;
     property MaxCredIDLen : UInt64 read fCBORMaxCredidlen;
+    property CoseAlgorithmCnt : integer read GetCoseAlgorithmCnt;
+    property CoseAlgorithms[index : integer] : integer read GetCoseAlgorithm;
+
 
     function UUIDToGuid : String;
 
@@ -127,6 +134,7 @@ type
     fSupportUserVerification: boolean;
     fSupportCredManager: boolean;
     fHasBlobSupport: boolean;
+    fIsWinHello: boolean;
 
     procedure OpenDevice;
     procedure CloseDevice;
@@ -164,6 +172,7 @@ type
     // only valid on fido2 devices
     property CBOR : TFido2CBOR read FCBOR;
     property IsFido2 : boolean read fIsFido2;
+    property IsWinHello : boolean read fIsWinHello;
     property HasBlobSupport : boolean read fHasBlobSupport;
 
     property LargeBlobRaw : TBytes read GetLargeBlobRaw;
@@ -288,6 +297,8 @@ type
     function GetAAGuid: TBytes;
     function GetCredSigCount: Integer;
     procedure SetLargeBlobFlag(const Value: boolean);
+    procedure SetID(const Value: string);
+    procedure SetClientData(const Value: string);
   protected
     fCred : Pfido_cred_t;
     fCredType : TFidoCredentialType;
@@ -306,6 +317,10 @@ type
     fUserName, fDisplaNamy : string;
     fUserIcon : TBytes;
     fUserId : TBytes;
+
+    // client
+    fID: string;
+    fClientData : string;
 
     fFmt : TFidoCredentialFmt;
     fsFmt : UTF8String;
@@ -340,6 +355,8 @@ type
     property UserDisplayName : string read fDisplaNamy write SetDisplayName;
     property Fmt : TFidoCredentialFmt read fFmt write SetFmt;
     property ClientDataHash : TFidoSHA256Hash read fClientDataHash write SetClientDataHash;
+    property ID : string read fID write SetID;
+    property ClientData : string read fClientData write SetClientData;
     property SigCount : Integer read GetCredSigCount;
 
     property AAGuid : TBytes read GetAAGuid;
@@ -419,6 +436,7 @@ type
     fRelyingParty : string;
     fHMACSecret : UTF8String;
     fClientHash : TFidoChallenge;       // challange
+    fClientData : string;
     fEnableHMACSecret : boolean;
     fUserPresence : fido_opt_t;
     fUserVerification : fido_opt_t;     //
@@ -434,6 +452,7 @@ type
     procedure SetUserIdent(const Value: fido_opt_t);
     procedure SetUserPresence(const Value: fido_opt_t);
     procedure SetHMACSecretValue(const Value: UTF8String);
+    procedure SetClientData(const Value: string);
   protected
     procedure InitAssert;
     procedure FreeAssert;
@@ -449,6 +468,7 @@ type
     property Fmt : TFidoCredentialFmt read fFmt write SetFmt;
     property UserPresence : fido_opt_t read fUserPresence write SetUserPresence;
     property ClientDataHash : TFidoChallenge read fClientHash write fClientHash;
+    property ClientData : string read fClientData write SetClientData;
     procedure CreateRandomCID;
 
     constructor Create;
@@ -765,6 +785,7 @@ begin
         include(fDevFlags, dfMsg);
 
      fIsFido2 := fido_dev_is_fido2( fdev );
+     fIsWinHello := fido_dev_is_winhello( fdev );
 
      fSupportPin := fido_dev_supports_pin( fDev );
      fSupportCredProtection := fido_dev_supports_cred_prot( fDev );
@@ -896,6 +917,7 @@ constructor TFido2CBOR.Create(dev: PFido_dev_t);
 begin
      fCBORVersions := TStringList.Create;
      fCBORExtension := TStringList.Create;
+     fCBORTransports := TStringList.Create;
 
      if dev <> nil then
         ReadProperties(dev);
@@ -912,6 +934,9 @@ var ci : Pfido_cbor_info_t;
     valuePtr : PBoolean;
     pinProto : PByte;
     pinProtoLen : integer;
+    pTransp : PPAnsiChar;
+    transpLen : integer;
+    algoCount : integer;
 begin
      ci := fido_cbor_info_new;
      if ci = nil then
@@ -951,6 +976,9 @@ begin
         infoLen := fido_cbor_info_options_len(ci);
         valuePtr := fido_cbor_info_options_value_ptr(ci);
 
+        pTransp := fido_cbor_info_transports_ptr(ci);
+        transpLen := fido_cbor_info_transports_len(ci);
+
         SetLength( fCBOROptions, infoLen );
 
         assert(pInfo <> nil, 'No options name ptr avail');
@@ -962,6 +990,17 @@ begin
              inc(pInfo);
              inc(valuePtr);
         end;
+
+        for i := 0 to transpLen - 1 do
+        begin
+             fCBORTransports.Add( String(pTransp^) );
+             inc(pTransp);
+        end;
+
+        algoCount := fido_cbor_info_algorithm_count(ci);
+        SetLength(fCBORCose, algoCount);
+        for i := 0 to algoCount - 1 do
+            fCBORCose[i] := fido_cbor_info_algorithm_cose(ci, i);
 
         fCBORmaxMsgSize := fido_cbor_info_maxmsgsiz( ci );
 
@@ -986,6 +1025,7 @@ var i: Integer;
 begin
      fCBORVersions.Free;
      fCBORExtension.Free;
+     fCBORTransports.Free;
 
      for i := 0 to Length(fCBOROptions) - 1 do
          fCBOROptions[i].Free;
@@ -999,6 +1039,16 @@ begin
      Result := '';
      if Length(fCBORUUID) = sizeof(TGuid) then
         Result := GUIDToString( PGuid( @fCBORUUID[0])^ );
+end;
+
+function TFido2CBOR.GetCoseAlgorithm(index: integer): integer;
+begin
+     Result := fCBORCose[index];
+end;
+
+function TFido2CBOR.GetCoseAlgorithmCnt: integer;
+begin
+     Result := Length(fCBORCose);
 end;
 
 function TFido2CBOR.GetOption(index: integer): TFido2CBOROption;
@@ -1051,6 +1101,7 @@ end;
 procedure TBaseFido2Credentials.UpdateCredentials;
 var pIcon : PByte;
     ext : integer;
+    s : UTF8String;
 begin
      if not Assigned(fCred) then
         exit;
@@ -1097,6 +1148,18 @@ begin
 
      if Length(fSmallBlob) > 0 then
         CR( fido_cred_set_blob( fcred, @fSmallBlob[0], Length(fSmallBlob) ) );
+
+     // id
+     if fID <> '' then
+     begin
+          s := UTF8String( fID );
+          CR( fido_cred_set_id( fcred, PAnsiChar(s), Length(s)));
+     end;
+     if fClientData <> '' then
+     begin
+          s := UTf8String( fClientData );
+          CR( fido_cred_set_clientdata( fcred, PAnsiChar(s), Length(s)));
+     end;
 
      // resident key
      CR( fido_cred_set_rk( fcred, fResidentKey ) );
@@ -1150,6 +1213,12 @@ end;
 procedure TBaseFido2Credentials.SetHMACSecret(const Value: boolean);
 begin
      fEnableHMACSecret := Value;
+     UpdateCredentials;
+end;
+
+procedure TBaseFido2Credentials.SetID(const Value: string);
+begin
+     fID := Value;
      UpdateCredentials;
 end;
 
@@ -1218,6 +1287,12 @@ end;
 procedure TBaseFido2Credentials.SetUserId(uid: TBytes);
 begin
      fUserId := Copy(uid, 0, Length(uid));
+     UpdateCredentials;
+end;
+
+procedure TBaseFido2Credentials.SetClientData(const Value: string);
+begin
+     fClientData := Value;
      UpdateCredentials;
 end;
 
@@ -1611,11 +1686,23 @@ begin
 end;
 
 procedure TBaseFidoAssert.UpdateAssert;
+var s : UTF8String;
+    b : TBytes;
 begin
      if not Assigned(fAssert) then
         exit;
 
-     CR( fido_assert_set_clientdata_hash(fAssert, @fClientHash[0], length(fClientHash)));
+     if fClientData <> '' then
+     begin
+          // clientdata hash will be calculated when set...
+          s := UTF8String( fClientData );
+          CR( fido_assert_set_clientdata(fAssert, PAnsiChar(s), Length(s)));
+          b := ptrToByteArr( fido_assert_clientdata_hash_ptr(fAssert), fido_assert_clientdata_hash_len(fAssert) );
+          if Length(b) = Length(fClientHash) then
+             Move(b[0], fClientHash[0], Length(fClientHash));
+     end
+     else
+         CR( fido_assert_set_clientdata_hash(fAssert, @fClientHash[0], length(fClientHash)));
 
      // relying party
      CR( fido_assert_set_rp( fAssert, PAnsiChar( Utf8String( fRelyingParty ) ) ) );
@@ -1655,6 +1742,12 @@ end;
 procedure TBaseFidoAssert.SetAssertType(const Value: TFidoCredentialType);
 begin
      fAssertType := Value;
+     UpdateAssert;
+end;
+
+procedure TBaseFidoAssert.SetClientData(const Value: string);
+begin
+     fClientData := Value;
      UpdateAssert;
 end;
 
@@ -1726,7 +1819,7 @@ begin
      PrepareAssert;
 
      if Length(fHMacSalt) > 0 then
-        cr( fido_assert_set_hmac_salt( fAssert, @fHMacSalt[0], Length(fHMacSalt) ) );
+        CR( fido_assert_set_hmac_salt( fAssert, @fHMacSalt[0], Length(fHMacSalt) ) );
 
      fExtensions := 0;
      if fEnableHMACSecret then
