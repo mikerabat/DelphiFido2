@@ -182,6 +182,7 @@ type
     procedure SetLargeBlobArr( data : TBytes; pin : string ); overload;
     procedure SetLargeBlob( key, data : TBytes; pin : string );
     procedure SetLargeBlobArr( cborData : TCborItem; pin : string ); overload;
+    procedure SetTimeout( ms : integer );
 
     procedure ForceFido2;
     procedure ForceU2F;
@@ -299,6 +300,8 @@ type
     procedure SetLargeBlobFlag(const Value: boolean);
     procedure SetID(const Value: string);
     procedure SetClientData(const Value: string);
+    function GetMinPinLen: integer;
+    procedure SetMinPinLen(const Value: integer);
   protected
     fCred : Pfido_cred_t;
     fCredType : TFidoCredentialType;
@@ -312,6 +315,7 @@ type
     fUserIdentification : fido_opt_t;
     fLargeBlockKeyFlag : boolean;
     fSmallBlob : TBytes;
+    fMinPinLen : integer;
 
     // user identification
     fUserName, fDisplaNamy : string;
@@ -358,6 +362,7 @@ type
     property ID : string read fID write SetID;
     property ClientData : string read fClientData write SetClientData;
     property SigCount : Integer read GetCredSigCount;
+    property MinPinLen : integer read GetMinPinLen write SetMinPinLen;
 
     property AAGuid : TBytes read GetAAGuid;
 
@@ -868,6 +873,12 @@ begin
         errStr := String( fido_strerr( r ) );
 end;
 
+procedure TFidoDevice.SetTimeout(ms: integer);
+begin
+     assert( Assigned( fDev ), 'Error no device opened');
+     CR( fido_dev_set_timeout( fDev, ms ) );
+end;
+
 // To reset start this routine within 5 seconds after attaching the device!
 procedure TFidoDevice.Reset;
 begin
@@ -1161,6 +1172,9 @@ begin
           CR( fido_cred_set_clientdata( fcred, PAnsiChar(s), Length(s)));
      end;
 
+     if fMinPinLen > 0 then
+        CR( fido_cred_set_pin_minlen( fcred, fMinPinLen ) );
+
      // resident key
      CR( fido_cred_set_rk( fcred, fResidentKey ) );
      CR( fido_cred_set_uv( fcred, fUserIdentification ) );
@@ -1231,6 +1245,12 @@ end;
 procedure TBaseFido2Credentials.SetLargeBlockKeyFlag(value: boolean);
 begin
      fLargeBlockKeyFlag := value;
+     UpdateCredentials;
+end;
+
+procedure TBaseFido2Credentials.SetMinPinLen(const Value: integer);
+begin
+     fMinPinLen := value;
      UpdateCredentials;
 end;
 
@@ -1329,6 +1349,14 @@ end;
 function TBaseFido2Credentials.GetCredSigCount: Integer;
 begin
      Result := integer( fido_cred_sigcount( fCred ) );
+end;
+
+function TBaseFido2Credentials.GetMinPinLen: integer;
+begin
+     if fCred = nil then
+        raise EFidoPropertyException.Create('No credentials');
+
+     Result := fido_cred_pin_minlen( fCred );
 end;
 
 procedure TBaseFido2Credentials.PrepareCredentials;
