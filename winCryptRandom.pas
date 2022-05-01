@@ -34,7 +34,7 @@ function CreateWinRndObj : IRndEngine;
 
 implementation
 
-uses {$IF CompilerVersion >= 23.0}System.SyncObjs, {$ELSE} SyncObjs, {$ENDIF}
+uses {$IF CompilerVersion >= 23.0}System.SyncObjs, {$ELSE} SyncObjs, {$IFEND}
      sysutils, {$IFDEF FPC} Windows {$ELSE} {$IF CompilerVersion >= 23.0} Winapi.Windows {$ELSE} Windows {$IFEND} {$ENDIF};
 
 var cs : TCriticalSection;

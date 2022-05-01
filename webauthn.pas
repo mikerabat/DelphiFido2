@@ -71,8 +71,31 @@ const WEBAUTHN_API_VERSION_1 = 1;
 //          - WEBAUTHN_EXTENSIONS_IDENTIFIER_CRED_PROTECT
 //
 
-            WEBAUTHN_API_CURRENT_VERSION = WEBAUTHN_API_VERSION_2;
+            WEBAUTHN_API_VERSION_3 = 3;
+// WEBAUTHN_API_VERSION_3 : Delta From WEBAUTHN_API_VERSION_2
+//      Data Structures and their sub versions:
+//          - WEBAUTHN_AUTHENTICATOR_MAKE_CREDENTIAL_OPTIONS    :   4
+//          - WEBAUTHN_AUTHENTICATOR_GET_ASSERTION_OPTIONS      :   5
+//          - WEBAUTHN_CREDENTIAL_ATTESTATION                   :   4
+//          - WEBAUTHN_ASSERTION                                :   2
+//      Added Extensions:
+//          - WEBAUTHN_EXTENSIONS_IDENTIFIER_CRED_BLOB
+//          - WEBAUTHN_EXTENSIONS_IDENTIFIER_MIN_PIN_LENGTH
+//
 
+            WEBAUTHN_API_VERSION_4 = 4;
+// WEBAUTHN_API_VERSION_4 : Delta From WEBAUTHN_API_VERSION_3
+//      Data Structures and their sub versions:
+//          - WEBAUTHN_AUTHENTICATOR_MAKE_CREDENTIAL_OPTIONS    :   5
+//          - WEBAUTHN_AUTHENTICATOR_GET_ASSERTION_OPTIONS      :   6
+//          - WEBAUTHN_ASSERTION                                :   3
+//      APIs:
+//          - WebAuthNGetPlatformCredentialList
+//          - WebAuthNFreePlatformCredentialList
+//          - WebAuthNDeletePlatformCredential
+//
+
+            WEBAUTHN_API_CURRENT_VERSION = WEBAUTHN_API_VERSION_2;
 //+------------------------------------------------------------------------------------------
 // Information about an RP Entity
 //-------------------------------------------------------------------------------------------
@@ -294,6 +317,127 @@ type
   PWEBAUTHN_CREDENTIAL_LIST = ^WEBAUTHN_CREDENTIAL_LIST;
 
 //+------------------------------------------------------------------------------------------
+// Credential Information for WebAuthNGetPlatformCredentialList API
+//-------------------------------------------------------------------------------------------
+
+const WEBAUTHN_CREDENTIAL_DETAILS_VERSION_1 = 1;
+      WEBAUTHN_CREDENTIAL_DETAILS_CURRENT_VERSION = WEBAUTHN_CREDENTIAL_DETAILS_VERSION_1;
+
+type
+  _WEBAUTHN_CREDENTIAL_DETAILS = packed record
+    // Version of this structure, to allow for modifications in the future.
+    dwVersion : DWORD;
+
+    // Size of pbCredentialID.
+    cbCredentialID : DWORD;
+    // _Field_size_bytes_(cbCredentialID)
+    pbCredentialID : PBYTE;
+
+    // RP Info
+    pRpInformation : PWebAuthnRPEntityInformation;
+
+    // User Info
+    pUserInformation : PWebAuthUserEntityInformation;
+
+    // Removable or not.
+    bRemovable : BOOL;
+  end;
+  WEBAUTHN_CREDENTIAL_DETAILS = _WEBAUTHN_CREDENTIAL_DETAILS;
+  PWEBAUTHN_CREDENTIAL_DETAILS = ^WEBAUTHN_CREDENTIAL_DETAILS;
+  TWebAuthCredentialDetails = _WEBAUTHN_CREDENTIAL_DETAILS;
+  PWebAuthCredentialDetails = PWEBAUTHN_CREDENTIAL_DETAILS;
+  PPWebAuthCredentialDetails = ^PWebAuthCredentialDetails;
+
+type
+  _WEBAUTHN_CREDENTIAL_DETAILS_LIST = packed record
+    cCredentialDetails : DWORD ;
+    // _Field_size_(cCredentialDetails)
+    ppCredentialDetails : PPWebAuthCredentialDetails;
+  end;
+  WEBAUTHN_CREDENTIAL_DETAILS_LIST = _WEBAUTHN_CREDENTIAL_DETAILS_LIST;
+  TWebAuthCredntialDetailsList = _WEBAUTHN_CREDENTIAL_DETAILS_LIST;
+  PWebAuthCredntialDetailsList = ^TWebAuthCredntialDetailsList;
+  PPWebAuthCredntialDetailsList = ^PWebAuthCredntialDetailsList;
+  PCWebAuthCredntialDetailsList = PWebAuthCredntialDetailsList;
+
+const WEBAUTHN_GET_CREDENTIALS_OPTIONS_VERSION_1 = 1;
+      WEBAUTHN_GET_CREDENTIALS_OPTIONS_CURRENT_VERSION = WEBAUTHN_GET_CREDENTIALS_OPTIONS_VERSION_1;
+
+type
+ _WEBAUTHN_GET_CREDENTIALS_OPTIONS = packed record
+    // Version of this structure, to allow for modifications in the future.
+    dwVersion : DWORD;
+
+    // Optional.
+    pwszRpId : LPCWSTR;
+
+    // Optional. BrowserInPrivate Mode. Defaulting to FALSE.
+    bBrowserInPrivateMode : BOOL;
+ end;
+ WEBAUTHN_GET_CREDENTIALS_OPTIONS = _WEBAUTHN_GET_CREDENTIALS_OPTIONS;
+ TWebAuthnGetCredentialsOptions = _WEBAUTHN_GET_CREDENTIALS_OPTIONS;
+ PWebAuthnGetCredentialsOptions = ^TWebAuthnGetCredentialsOptions;
+ PCWebAuthnGetCredentialsOptions = PWebAuthnGetCredentialsOptions;
+
+//+------------------------------------------------------------------------------------------
+// PRF values.
+//-------------------------------------------------------------------------------------------
+
+const WEBAUTHN_CTAP_ONE_HMAC_SECRET_LENGTH = 32;
+
+// SALT values below by default are converted into RAW Hmac-Secret values as per PRF extension.
+//   - SHA-256(UTF8Encode("WebAuthn PRF") || 0x00 || Value)
+//
+// Set WEBAUTHN_CTAP_HMAC_SECRET_VALUES_FLAG in dwFlags in WEBAUTHN_AUTHENTICATOR_GET_ASSERTION_OPTIONS,
+//   if caller wants to provide RAW Hmac-Secret SALT values directly. In that case,
+//   values if provided MUST be of WEBAUTHN_CTAP_ONE_HMAC_SECRET_LENGTH size.
+
+type
+  _WEBAUTHN_HMAC_SECRET_SALT = packed record
+    // Size of pbFirst.
+    cbFirst : DWORD;
+    //_Field_size_bytes_(cbFirst)
+    pbFirst : PBYTE;                                  // Required
+
+    // Size of pbSecond.
+    cbSecond : DWORD;
+    //_Field_size_bytes_(cbSecond)
+    pbSecond : PBYTE;
+  end;
+  WEBAUTHN_HMAC_SECRET_SALT = _WEBAUTHN_HMAC_SECRET_SALT;
+  TWebAuthnHMACSecretSalt = _WEBAUTHN_HMAC_SECRET_SALT;
+  PWebAuthnHMACSecretSalt = ^TWebAuthnHMACSecretSalt;
+  PCWebAuthnHMACSecretSalt = PWebAuthnHMACSecretSalt;
+
+type
+  _WEBAUTHN_CRED_WITH_HMAC_SECRET_SALT = packed record
+    // Size of pbCredID.
+    cbCredID : DWORD;
+    //_Field_size_bytes_(cbCredID)
+    pbCredID : PBYTE;                                 // Required
+
+    // PRF Values for above credential
+    pHmacSecretSalt : PWebAuthnHMACSecretSalt;     // Required
+  end;
+  WEBAUTHN_CRED_WITH_HMAC_SECRET_SALT = _WEBAUTHN_CRED_WITH_HMAC_SECRET_SALT;
+  TWebAuthCredWithHMACSecretSalt = _WEBAUTHN_CRED_WITH_HMAC_SECRET_SALT;
+  PWebAuthCredWithHMACSecretSalt = ^TWebAuthCredWithHMACSecretSalt;
+  PCWebAuthCredWithHMACSecretSalt = PWebAuthCredWithHMACSecretSalt;
+
+type
+   _WEBAUTHN_HMAC_SECRET_SALT_VALUES = packed record
+    pGlobalHmacSalt : PWebAuthnHMACSecretSalt;
+
+    cCredWithHmacSecretSaltList : DWORD;
+    //_Field_size_(cCredWithHmacSecretSaltList)
+    pCredWithHmacSecretSaltList : PWebAuthCredWithHMACSecretSalt;
+  end;
+  WEBAUTHN_HMAC_SECRET_SALT_VALUES = _WEBAUTHN_HMAC_SECRET_SALT_VALUES;
+  TWebAuthHMACSecretSaltValues = WEBAUTHN_HMAC_SECRET_SALT_VALUES;
+  PWebAuthHMACSecretSaltValues = ^TWebAuthHMACSecretSaltValues;
+  PCWebAuthHMACSecretSaltValues = PWebAuthHMACSecretSaltValues;
+
+//+------------------------------------------------------------------------------------------
 // Hmac-Secret extension
 //-------------------------------------------------------------------------------------------
 
@@ -342,6 +486,53 @@ const WEBAUTHN_EXTENSIONS_IDENTIFIER_CRED_PROTECT = 'credProtect';
 // GetAssertion Output Type:    Not Supported
 
 //+------------------------------------------------------------------------------------------
+//  credBlob  extension
+//-------------------------------------------------------------------------------------------
+
+type
+  _WEBAUTHN_CRED_BLOB_EXTENSION = packed record
+    // Size of pbCredBlob.
+    cbCredBlob : DWORD;
+    // _Field_size_bytes_(cbCredBlob)
+    pbCredBlob : PBYTE;
+  end;
+  WEBAUTHN_CRED_BLOB_EXTENSION = _WEBAUTHN_CRED_BLOB_EXTENSION;
+  TWebAuthCredBlobExtension = _WEBAUTHN_CRED_BLOB_EXTENSION;
+  PWebAuthCredBlobExtension = ^TWebAuthCredBlobExtension;
+  PCWebAuthCredBlobExtension = PWebAuthCredBlobExtension;
+
+const WEBAUTHN_EXTENSIONS_IDENTIFIER_CRED_BLOB = 'credBlob';
+// Below type definitions is for WEBAUTHN_EXTENSIONS_IDENTIFIER_CRED_BLOB
+// MakeCredential Input Type:   WEBAUTHN_CRED_BLOB_EXTENSION.
+//      - pvExtension must point to a WEBAUTHN_CRED_BLOB_EXTENSION struct
+//      - cbExtension must contain the sizeof(WEBAUTHN_CRED_BLOB_EXTENSION).
+// MakeCredential Output Type:  BOOL.
+//      - pvExtension will point to a BOOL with the value TRUE if credBlob was successfully created
+//      - cbExtension will contain the sizeof(BOOL).
+// GetAssertion Input Type:     BOOL.
+//      - pvExtension must point to a BOOL with the value TRUE to request the credBlob.
+//      - cbExtension must contain the sizeof(BOOL).
+// GetAssertion Output Type:    WEBAUTHN_CRED_BLOB_EXTENSION.
+//      - pvExtension will point to a WEBAUTHN_CRED_BLOB_EXTENSION struct if the authenticator
+//        returns the credBlob in the signed extensions
+//      - cbExtension will contain the sizeof(WEBAUTHN_CRED_BLOB_EXTENSION).
+
+//+------------------------------------------------------------------------------------------
+//  minPinLength  extension
+//-------------------------------------------------------------------------------------------
+
+const WEBAUTHN_EXTENSIONS_IDENTIFIER_MIN_PIN_LENGTH = 'minPinLength';
+// Below type definitions is for WEBAUTHN_EXTENSIONS_IDENTIFIER_MIN_PIN_LENGTH
+// MakeCredential Input Type:   BOOL.
+//      - pvExtension must point to a BOOL with the value TRUE to request the minPinLength.
+//      - cbExtension must contain the sizeof(BOOL).
+// MakeCredential Output Type:  DWORD.
+//      - pvExtension will point to a DWORD with the minimum pin length if returned by the authenticator
+//      - cbExtension will contain the sizeof(DWORD).
+// GetAssertion Input Type:     Not Supported
+// GetAssertion Output Type:    Not Supported
+
+//+------------------------------------------------------------------------------------------
 // Information about Extensions.
 //-------------------------------------------------------------------------------------------
 type
@@ -380,10 +571,21 @@ const WEBAUTHN_AUTHENTICATOR_ATTACHMENT_ANY = 0;
       WEBAUTHN_ATTESTATION_CONVEYANCE_PREFERENCE_INDIRECT = 2;
       WEBAUTHN_ATTESTATION_CONVEYANCE_PREFERENCE_DIRECT = 3;
 
+      WEBAUTHN_ENTERPRISE_ATTESTATION_NONE = 0;
+      WEBAUTHN_ENTERPRISE_ATTESTATION_VENDOR_FACILITATED = 1;
+      WEBAUTHN_ENTERPRISE_ATTESTATION_PLATFORM_MANAGED = 2;
+
+      WEBAUTHN_LARGE_BLOB_SUPPORT_NONE = 0;
+      WEBAUTHN_LARGE_BLOB_SUPPORT_REQUIRED = 1;
+      WEBAUTHN_LARGE_BLOB_SUPPORT_PREFERRED = 2;
+
+
       WEBAUTHN_AUTHENTICATOR_MAKE_CREDENTIAL_OPTIONS_VERSION_1 = 1;
       WEBAUTHN_AUTHENTICATOR_MAKE_CREDENTIAL_OPTIONS_VERSION_2 = 2;
       WEBAUTHN_AUTHENTICATOR_MAKE_CREDENTIAL_OPTIONS_VERSION_3 = 3;
-      WEBAUTHN_AUTHENTICATOR_MAKE_CREDENTIAL_OPTIONS_CURRENT_VERSION = WEBAUTHN_AUTHENTICATOR_MAKE_CREDENTIAL_OPTIONS_VERSION_3;
+      WEBAUTHN_AUTHENTICATOR_MAKE_CREDENTIAL_OPTIONS_VERSION_4 = 4;
+      WEBAUTHN_AUTHENTICATOR_MAKE_CREDENTIAL_OPTIONS_VERSION_5 = 5;
+      WEBAUTHN_AUTHENTICATOR_MAKE_CREDENTIAL_OPTIONS_CURRENT_VERSION = WEBAUTHN_AUTHENTICATOR_MAKE_CREDENTIAL_OPTIONS_VERSION_5;
 
 type
   _WEBAUTHN_AUTHENTICATOR_MAKE_CREDENTIAL_OPTIONS = packed record
@@ -428,6 +630,31 @@ type
 
     // Exclude Credential List. If present, "CredentialList" will be ignored.
     pExcludeCredentialList : PWEBAUTHN_CREDENTIAL_LIST;
+
+    //
+    // The following fields have been added in WEBAUTHN_AUTHENTICATOR_MAKE_CREDENTIAL_OPTIONS_VERSION_4
+    //
+
+    // Enterprise Attestation
+    dwEnterpriseAttestation : DWORD;
+
+    // Large Blob Support: none, required or preferred
+    //
+    // NTE_INVALID_PARAMETER when large blob required or preferred and
+    //   bRequireResidentKey isn't set to TRUE
+    dwLargeBlobSupport : DWORD;
+
+    // Optional. Prefer key to be resident. Defaulting to FALSE. When TRUE,
+    // overrides the above bRequireResidentKey.
+    bPreferResidentKey : BOOL;
+
+    //
+    // The following fields have been added in WEBAUTHN_AUTHENTICATOR_MAKE_CREDENTIAL_OPTIONS_VERSION_5
+    //
+
+    // Optional. BrowserInPrivate Mode. Defaulting to FALSE.
+    bBrowserInPrivateMode : BOOL;
+
   end;
 
   WEBAUTHN_AUTHENTICATOR_MAKE_CREDENTIAL_OPTIONS = _WEBAUTHN_AUTHENTICATOR_MAKE_CREDENTIAL_OPTIONS;
@@ -435,11 +662,26 @@ type
   PCWEBAUTHN_AUTHENTICATOR_MAKE_CREDENTIAL_OPTIONS = PWEBAUTHN_AUTHENTICATOR_MAKE_CREDENTIAL_OPTIONS;
   TWebAuthnAuthenticatorMakeCredentialOptions = WEBAUTHN_AUTHENTICATOR_MAKE_CREDENTIAL_OPTIONS;
 
-const WEBAUTHN_AUTHENTICATOR_GET_ASSERTION_OPTIONS_VERSION_1 = 1;
+const WEBAUTHN_CRED_LARGE_BLOB_OPERATION_NONE = 0;
+      WEBAUTHN_CRED_LARGE_BLOB_OPERATION_GET = 1;
+      WEBAUTHN_CRED_LARGE_BLOB_OPERATION_SET = 2;
+      WEBAUTHN_CRED_LARGE_BLOB_OPERATION_DELETE = 3;
+
+
+      WEBAUTHN_AUTHENTICATOR_GET_ASSERTION_OPTIONS_VERSION_1 = 1;
       WEBAUTHN_AUTHENTICATOR_GET_ASSERTION_OPTIONS_VERSION_2 = 2;
       WEBAUTHN_AUTHENTICATOR_GET_ASSERTION_OPTIONS_VERSION_3 = 3;
       WEBAUTHN_AUTHENTICATOR_GET_ASSERTION_OPTIONS_VERSION_4 = 4;
-      WEBAUTHN_AUTHENTICATOR_GET_ASSERTION_OPTIONS_CURRENT_VERSION = WEBAUTHN_AUTHENTICATOR_GET_ASSERTION_OPTIONS_VERSION_4;
+      WEBAUTHN_AUTHENTICATOR_GET_ASSERTION_OPTIONS_VERSION_5 = 5;
+      WEBAUTHN_AUTHENTICATOR_GET_ASSERTION_OPTIONS_VERSION_6 = 6;
+      WEBAUTHN_AUTHENTICATOR_GET_ASSERTION_OPTIONS_CURRENT_VERSION = WEBAUTHN_AUTHENTICATOR_GET_ASSERTION_OPTIONS_VERSION_6;
+
+(*
+    Information about flags.
+*)
+
+      WEBAUTHN_AUTHENTICATOR_HMAC_SECRET_VALUES_FLAG = $00100000;
+
 
 type
   _WEBAUTHN_AUTHENTICATOR_GET_ASSERTION_OPTIONS = packed record
@@ -489,6 +731,27 @@ type
 
     // Allow Credential List. If present, "CredentialList" will be ignored.
     pAllowCredentialList : PWEBAUTHN_CREDENTIAL_LIST;
+
+    //
+    // The following fields have been added in WEBAUTHN_AUTHENTICATOR_GET_ASSERTION_OPTIONS_VERSION_5
+    //
+
+    dwCredLargeBlobOperation : DWORD;
+
+    // Size of pbCredLargeBlob
+    cbCredLargeBlob : DWORD;
+    //_Field_size_bytes_(cbCredLargeBlob)
+    pbCredLargeBlob : PBYTE;
+
+    //
+    // The following fields have been added in WEBAUTHN_AUTHENTICATOR_GET_ASSERTION_OPTIONS_VERSION_6
+    //
+
+    // PRF values which will be converted into HMAC-SECRET values according to WebAuthn Spec.
+    pHmacSecretSaltValues : PWebAuthHMACSecretSaltValues;
+
+    // Optional. BrowserInPrivate Mode. Defaulting to FALSE.
+    bBrowserInPrivateMode : BOOL;
   end;
   WEBAUTHN_AUTHENTICATOR_GET_ASSERTION_OPTIONS = _WEBAUTHN_AUTHENTICATOR_GET_ASSERTION_OPTIONS;
   PWEBAUTHN_AUTHENTICATOR_GET_ASSERTION_OPTIONS = ^WEBAUTHN_AUTHENTICATOR_GET_ASSERTION_OPTIONS;
@@ -572,7 +835,8 @@ const WEBAUTHN_ATTESTATION_TYPE_PACKED = 'packed';
       WEBAUTHN_CREDENTIAL_ATTESTATION_VERSION_1 = 1;
       WEBAUTHN_CREDENTIAL_ATTESTATION_VERSION_2 = 2;
       WEBAUTHN_CREDENTIAL_ATTESTATION_VERSION_3 = 3;
-      WEBAUTHN_CREDENTIAL_ATTESTATION_CURRENT_VERSION = WEBAUTHN_CREDENTIAL_ATTESTATION_VERSION_3;
+      WEBAUTHN_CREDENTIAL_ATTESTATION_VERSION_4 = 4;
+      WEBAUTHN_CREDENTIAL_ATTESTATION_CURRENT_VERSION = WEBAUTHN_CREDENTIAL_ATTESTATION_VERSION_4;
 
 type
   _WEBAUTHN_CREDENTIAL_ATTESTATION = packed record
@@ -627,6 +891,15 @@ type
     // One of the WEBAUTHN_CTAP_TRANSPORT_* bits will be set corresponding to
     // the transport that was used.
     dwUsedTransport : DWORD;
+
+    //
+    // Following fields have been added in WEBAUTHN_CREDENTIAL_ATTESTATION_VERSION_4
+    //
+
+    bEpAtt : BOOL;
+    bLargeBlobSupported : BOOL;
+    bResidentKey : BOOL;
+
   end;
   WEBAUTHN_CREDENTIAL_ATTESTATION = _WEBAUTHN_CREDENTIAL_ATTESTATION;
   PWEBAUTHN_CREDENTIAL_ATTESTATION = ^WEBAUTHN_CREDENTIAL_ATTESTATION;
@@ -636,7 +909,21 @@ type
 // authenticatorGetAssertion output.
 //-------------------------------------------------------------------------------------------
 
-const WEBAUTHN_ASSERTION_CURRENT_VERSION = 1;
+const WEBAUTHN_CRED_LARGE_BLOB_STATUS_NONE                  =  0;
+      WEBAUTHN_CRED_LARGE_BLOB_STATUS_SUCCESS               =  1;
+      WEBAUTHN_CRED_LARGE_BLOB_STATUS_NOT_SUPPORTED         =  2;
+      WEBAUTHN_CRED_LARGE_BLOB_STATUS_INVALID_DATA          =  3;
+      WEBAUTHN_CRED_LARGE_BLOB_STATUS_INVALID_PARAMETER     =  4;
+      WEBAUTHN_CRED_LARGE_BLOB_STATUS_NOT_FOUND             =  5;
+      WEBAUTHN_CRED_LARGE_BLOB_STATUS_MULTIPLE_CREDENTIALS  =  6;
+      WEBAUTHN_CRED_LARGE_BLOB_STATUS_LACK_OF_SPACE         =  7;
+      WEBAUTHN_CRED_LARGE_BLOB_STATUS_PLATFORM_ERROR        =  8;
+      WEBAUTHN_CRED_LARGE_BLOB_STATUS_AUTHENTICATOR_ERROR   =  9;
+
+      WEBAUTHN_ASSERTION_VERSION_1                          = 1;
+      WEBAUTHN_ASSERTION_VERSION_2                          = 2;
+      WEBAUTHN_ASSERTION_VERSION_3                          = 3;
+      WEBAUTHN_ASSERTION_CURRENT_VERSION = WEBAUTHN_ASSERTION_VERSION_3;
 
 type
   _WEBAUTHN_ASSERTION = packed record
@@ -663,6 +950,24 @@ type
     // UserId
 //    _Field_size_bytes_(cbUserId)
     pbUserId : PBYTE;
+
+    //
+    // Following fields have been added in WEBAUTHN_ASSERTION_VERSION_2
+    //
+
+    Extensions : WEBAUTHN_EXTENSIONS;
+
+    // Size of pbCredLargeBlob
+    cbCredLargeBlob : DWORD;
+    //_Field_size_bytes_(cbCredLargeBlob)
+    pbCredLargeBlob : PBYTE;
+
+    dwCredLargeBlobStatus : DWORD;
+
+    //
+    // Following fields have been added in WEBAUTHN_ASSERTION_VERSION_3
+    //
+    pHmacSecret : PWebAuthnHMACSecretSalt;
   end;
   WEBAUTHN_ASSERTION = _WEBAUTHN_ASSERTION;
   TWebAutNAssertion = WEBAUTHN_ASSERTION;
@@ -704,6 +1009,22 @@ procedure WebAuthNFreeAssertion(
 function WebAuthNGetCancellationId( 
                                     var pCancellationId : TGUID // _Out_
                                   ) : HRESULT; stdcall; external cWebAuthLibName;
+
+function WebAuthNCancelCurrentOperation(
+    pCancellationId : PGUID ) : HRESULT; stdcall; external cWebAuthLibName;
+
+// Returns NTE_NOT_FOUND when credentials are not found.
+function WebAuthNGetPlatformCredentialList(
+    pGetCredentialsOptions : PCWebAuthnGetCredentialsOptions;
+    var ppCredentialDetailsList : PWebAuthCredntialDetailsList) : HRESULT; stdcall; external cWebAuthLibName;
+
+procedure WebAuthNFreePlatformCredentialList(
+    pCredentialDetailsList : PWebAuthCredntialDetailsList); stdcall; external cWebAuthLibName;
+
+function WebAuthNDeletePlatformCredential(
+    cbCredentialId : DWORD;
+    //_In_reads_bytes_(cbCredentialId)const BYTE *pbCredentialId
+    pbCredentialId : PBYTE )  : HRESULT; stdcall; external cWebAuthLibName;
 
 //
 // Returns the following Error Names:
