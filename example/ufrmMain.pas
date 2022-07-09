@@ -1273,6 +1273,7 @@ begin
         MemLog.Lines.Add('Supports Cred Manager: ' + BoolToStr(dev.SupportCredManager, True));
         MemLog.Lines.Add('Supports Cred Protection: ' + BoolToStr(dev.SupportCredProtection, True));
         MemLog.Lines.Add('Supports User Verification: ' + BoolToStr(dev.SupportUserVerification, True));
+        MemLog.Lines.Add('Supports Permissions: ' + BoolToStr(dev.SupportPermissions, True));
         MemLog.Lines.Add('User verification retry count: ' + IntToStr(dev.UserVerificatinRetryCount));
         MemLog.Lines.Add('Is WinHello: ' + BoolToStr(dev.IsWinHello, True));
 
@@ -1308,6 +1309,7 @@ begin
              memLog.Lines.Add('Credential manager support: ' + BoolToStr(dev.SupportCredManager, True));
 
              memLog.Lines.Add('MaxBlobLen: ' + IntTostr(dev.CBOR.maxBlobLen) );
+             memLog.Lines.Add('MaxLargeBlobLen: ' + IntToStr(dev.CBOR.MaxLargeBlob) );
              memLog.Lines.Add('FWVersion: ' + IntTostr(dev.CBOR.FWVersion) );
              memLog.Lines.Add('MaxCredCntList: ' + IntTostr(dev.CBOR.MaxCredCntList) );
              memLog.Lines.Add('MaxCredIDLen: ' + IntTostr(dev.CBOR.MaxCredIDLen) );

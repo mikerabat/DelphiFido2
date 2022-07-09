@@ -13,7 +13,7 @@
 // ###################################################################
 
 
-// fido2 dll import file for fido2.dll V 1.9.0 and higher
+// fido2 dll import file for fido2.dll V 1.11.0 and higher
 // the file is basically a conversion of the imported header files of the fido2.dll
 // based on the sources in: https://github.com/Yubico/libfido2
 
@@ -327,14 +327,14 @@ type
 	   attcred : fido_attcred_t;    // returned credential (key + id)
 	   attstmt : fido_attstmt_t;    // attestation statement (x509 + sig)
     largeblob_key : fido_blob_t; // decoded large blob key
-	   blob : fido_blob_t;          // FIDO 2.1 credBlob
+	   blob : fido_blob_t;          // CTAP 2.1 credBlob
   end;
   fido_cred_t = fido_cred;
 
   fido_assert_extattr = packed record
     mask : integer;                 // decoded extensions
     hmac_secret_enc : fido_blob_t;  // hmac secret, encrypted
-    blob : fido_blob_t;             // decoded FIDO 2.1 credBlob
+    blob : fido_blob_t;             // decoded CTAP 2.1 credBlob
   end;
   fido_assert_extattr_t = fido_assert_extattr;
 
@@ -412,10 +412,11 @@ type
 	   maxmsgsiz : UInt64;            // maximum message size
 	   protocols : fido_byte_array_t; // supported pin protocols
     algorithms : fido_algo_array_t;// list of supported algorithms
-    maxcredcntlst : Uint64;        // max number of credentials in list
+    maxcredcntlst : Uint64;        // max of credentials in list
 	   maxcredidlen : Uint64;         // max credential ID length
     fwversion : UINT64;            // firmware version
     maxcredbloblen : UINT64;       // max credBlob length
+    maxlargeblob : UINT64;         // max largeBlob array length
   end;
   fido_cbor_info_t = fido_cbor_info;
 
@@ -609,6 +610,7 @@ function fido_dev_new : Pfido_dev_t; cdecl; external libFido;
 function fido_dev_new_with_info( dev : Pfido_dev_info_t) : Pfido_dev_t; cdecl; external libFido;
 function fido_dev_info_new(n : size_t) : Pfido_dev_info_t; cdecl; external libFido;
 function fido_cbor_info_new : Pfido_cbor_info_t; cdecl; external libFido;
+function fido_dev_io_handle( dev : Pfido_dev ) : Pointer; cdecl; external libFido;
 
 procedure fido_assert_free( var assert_p : Pfido_assert_t); cdecl; external libFido;
 procedure fido_cbor_info_free(var ci_p : Pfido_cbor_info_t); cdecl; external libFido;
@@ -723,6 +725,9 @@ function fido_dev_get_uv_retry_count(dev : Pfido_dev_t; var retries : integer) :
 function fido_dev_get_touch_begin(dev : Pfido_dev_t) : integer; cdecl; external libFido;
 function fido_dev_get_touch_status(dev : Pfido_dev_t; var touched : integer; waitMs : integer) : integer; cdecl; external libFido;
 function fido_dev_info_manifest(devlist : Pfido_dev_info_t; ilen : size_t; var olen : Integer) : integer; cdecl; external libFido;
+function fido_dev_info_set(devlist : Pfido_dev_info_t; i : size_t; path : PAnsiChar;
+                           manufacturer : PAnsiChar; product : PAnsiChar; io : Pfido_dev_io_t; transport : Pfido_dev_transport_t ) : integer; cdecl; external libFido;
+
 function fido_dev_make_cred(dev : Pfido_dev_t; cred : Pfido_cred_t; pin : PAnsiChar) : integer; cdecl; external libFido;
 function fido_dev_open_with_info(dev : Pfido_dev_t ) : integer; cdecl; external libFido;
 function fido_dev_open(dev : Pfido_dev_t; path : PAnsiChar) : integer; cdecl; external libFido;
@@ -740,6 +745,8 @@ function fido_dev_is_fido2(dev : Pfido_dev_t) : boolean; cdecl; external libFido
 function fido_dev_is_winhello(dev : Pfido_dev_t) : boolean; cdecl; external libFido;
 function fido_dev_supports_pin(dev : Pfido_dev_t) : boolean; cdecl; external libFido;
 function fido_dev_supports_cred_prot(dev : Pfido_dev_t) : boolean; cdecl; external libFido;
+function fido_dev_supports_permissions(dev : Pfido_dev_t) : boolean; cdecl; external libFido;
+
 function fido_dev_supports_credman(dev : Pfido_dev_t) : boolean; cdecl; external libFido;
 function fido_dev_supports_uv(dev : Pfido_dev_t) : boolean; cdecl; external libFido;
 
@@ -791,6 +798,7 @@ function fido_dev_flags(dev : Pfido_dev_t) : Byte; cdecl; external libFido;
 function fido_dev_info_vendor(di : Pfido_dev_info_t) : smallInt; cdecl; external libFido;
 function fido_dev_info_product(di : Pfido_dev_info_t) : smallInt; cdecl; external libFido;
 function fido_cbor_info_maxmsgsiz(ci : Pfido_cbor_info_t) : UInt64; cdecl; external libFido;
+function fido_cbor_info_maxlargeblob(ci : Pfido_cbor_info_t) : UInt64; cdecl; external libFido;
 function fido_cbor_info_fwversion(ci : Pfido_cbor_info_t) : UINT64; cdecl; external libFido;
 function fido_cbor_info_maxcredcntlst(ci : Pfido_cbor_info_t) : UInt64; cdecl; external libFido;
 function fido_cbor_info_maxcredidlen(ci : Pfido_cbor_info_t) : UINT64; cdecl; external libFido;

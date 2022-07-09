@@ -65,6 +65,7 @@ type
     fCBOROptions : Array of TFido2CBOROption;
     fCBORPinProtocols : TBytes;
     fCBORmaxMsgSize : UInt64;
+    fCBORmaxLargeBlob : UInt64;
     fCBORMaxCredCntLst : UInt64;
     fCBORMaxCredidlen : UInt64;
     fCBORMaxBlobLen : UInt64;
@@ -84,6 +85,7 @@ type
     property Extensions : TStringList read fCBORExtension;
     property PinProtocols : TBytes read fCBORPinProtocols;
     property MaxBlobLen : UInt64 read fCBORMaxBlobLen;
+    property MaxLargeBlob : UInt64 read fCBORmaxLargeBlob;
     property FWVersion : UInt64 read fCBORFWVersion;
     property MaxCredCntList : UInt64 read fCBORMaxCredCntLst;
     property MaxCredIDLen : UInt64 read fCBORMaxCredidlen;
@@ -124,6 +126,7 @@ type
     fRetryCnt : integer;
     fSupportPin : boolean;
     fSupportCredProtection : boolean;
+    fSupportPermissions : boolean;
 
     fDevFlags : TFidoDevFlags;
     fIsFido2 : boolean;
@@ -167,6 +170,7 @@ type
     property SupportCredProtection : boolean read fSupportCredProtection;
     property SupportUserVerification : boolean read fSupportUserVerification;
     property SupportCredManager : boolean read fSupportCredManager;
+    property SupportPermissions : boolean read fSupportPermissions;
     property DevHdl : Pfido_dev_t read fDev;
 
     // only valid on fido2 devices
@@ -796,6 +800,7 @@ begin
      fSupportCredProtection := fido_dev_supports_cred_prot( fDev );
      fSupportCredManager := fido_dev_supports_credman( fDev );
      fSupportUserVerification := fido_dev_supports_uv( fDev );
+     fSupportPermissions := fido_dev_supports_permissions( fDev );
 
      fCBOR := nil;
      fHasBlobSupport := False;
@@ -1014,6 +1019,7 @@ begin
             fCBORCose[i] := fido_cbor_info_algorithm_cose(ci, i);
 
         fCBORmaxMsgSize := fido_cbor_info_maxmsgsiz( ci );
+        fCBORmaxLargeBlob := fido_cbor_info_maxlargeblob( ci );
 
         pinProto := fido_cbor_info_protocols_ptr( ci );
         pinProtoLen := fido_cbor_info_protocols_len(ci);
