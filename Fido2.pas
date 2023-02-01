@@ -59,6 +59,7 @@ type
     fCBORVersions : TStringList;
     fCBORExtension : TStringList;
     fCBORTransports : TStringList;
+    fCBORCertNames : TStringList;
     fCBORUUID : TBytes;
     fCBORGuid : string;
     fCBORCose : Array of integer;
@@ -71,16 +72,27 @@ type
     fCBORMaxBlobLen : UInt64;
     fCBORFWVersion : UInt64;
 
+    fCBORMaxrpidMinpinlen : UINT64;
+    fCBORMinPinLen : UINT64;
+    fCBORUVAttempts : UINT64;
+    fCBORUVMOdality : UINT64;
+    fCBORRKRemaining : UINT64;
+    fCBORNewPinRequired : boolean;
+
     procedure ReadProperties( dev : PFido_dev_t );
     function GetOption(index: integer): TFido2CBOROption;
     function GetOptionsCnt: integer;
     function GetCoseAlgorithm(index: integer): integer;
     function GetCoseAlgorithmCnt: integer;
+    function GetCertName(index: Integer): string;
+    function GetCertNameLen: integer;
   public
     property MaxMsgSize : UInt64 read fCBORmaxMsgSize;
     property UUID : TBytes read fCBORUUID;
     property OptionsCnt : integer read GetOptionsCnt;
     property Options[index : integer] : TFido2CBOROption read GetOption;
+    property CertName[index : Integer] : string read GetCertName;
+    property CertNameLen : integer read GetCertNameLen;
     property Versions : TStringList read fCBORVersions;
     property Extensions : TStringList read fCBORExtension;
     property PinProtocols : TBytes read fCBORPinProtocols;
@@ -293,7 +305,7 @@ type
 // #### Credential api
 // ###################################################
 type
-  TFidoCredentialType = (ctCOSEES256 = COSE_ES256, ctCoseEDDSA = COSE_EDDSA, ctCoseRS256 = COSE_RS256);
+  TFidoCredentialType = (ctCOSEES256 = COSE_ES256, ctCoseEDDSA = COSE_EDDSA, ctCoseES384 = COSE_ES384, ctCoseRS256 = COSE_RS256);
   TFidoCredentialFmt = (fmDef, fmFido2, fmU2F);
 
   TBaseFido2Credentials = class(TObject)
@@ -515,6 +527,7 @@ type
     fpk1 : Pes256_pk_t;
     fpk2 : Peddsa_pk_t;
     fpk3 : Prs256_pk_t;
+    fPK4 : Pes384_pk_t;
 
     procedure SetAssertType(const Value: TFidoCredentialType); override;
     procedure InitPublikKey;
@@ -934,6 +947,7 @@ begin
      fCBORVersions := TStringList.Create;
      fCBORExtension := TStringList.Create;
      fCBORTransports := TStringList.Create;
+     fCBORCertNames := TStringList.Create;
 
      if dev <> nil then
         ReadProperties(dev);
@@ -974,6 +988,14 @@ begin
         for i := 0 to infoLen - 1 do
         begin
              fCBORExtension.Add( String( pinfo^ ) );
+             inc(pInfo);
+        end;
+
+        infoLen := fido_cbor_info_certs_len( ci );
+        pInfo := fido_cbor_info_certs_name_ptr( ci );
+        for i := 0 to infoLen - 1 do
+        begin
+             fCBORCertNames.Add( String( pinfo^ ) );
              inc(pInfo);
         end;
 
@@ -1032,6 +1054,13 @@ begin
         fCBORMaxCredidlen := fido_cbor_info_maxcredidlen(ci);
         fCBORMaxBlobLen := fido_cbor_info_maxcredbloblen(ci);
         fCBORFWVersion := fido_cbor_info_fwversion(ci);
+
+        fCBORMaxrpidMinpinlen := fido_cbor_info_maxrpid_minpinlen(ci);
+        fCBORMinPinLen := fido_cbor_info_minpinlen(ci);
+        fCBORUVAttempts := fido_cbor_info_uv_attempts(ci);
+        fCBORUVMOdality := fido_cbor_info_uv_modality(ci);
+        fCBORRKRemaining := fido_cbor_info_rk_remaining(ci);
+        fCBORNewPinRequired := fido_cbor_info_new_pin_required(ci);
      finally
             fido_cbor_info_free(ci);
      end;
@@ -1043,6 +1072,7 @@ begin
      fCBORVersions.Free;
      fCBORExtension.Free;
      fCBORTransports.Free;
+     fCBORCertNames.Free;
 
      for i := 0 to Length(fCBOROptions) - 1 do
          fCBOROptions[i].Free;
@@ -1056,6 +1086,16 @@ begin
      Result := '';
      if Length(fCBORUUID) = sizeof(TGuid) then
         Result := GUIDToString( PGuid( @fCBORUUID[0])^ );
+end;
+
+function TFido2CBOR.GetCertName(index: Integer): string;
+begin
+
+end;
+
+function TFido2CBOR.GetCertNameLen: integer;
+begin
+     Result := fCBORCertNames.Count;
 end;
 
 function TFido2CBOR.GetCoseAlgorithm(index: integer): integer;
@@ -2003,6 +2043,11 @@ begin
                          assert(Assigned(fpk1), 'Memory allocation form es256 failed');
                          CR( es256_pk_from_ptr( fpk1, @fPK[0], Length(fPK) ) );
                     end;
+       ctCoseES384: begin
+                         fpk4 := es384_pk_new;
+                         assert(Assigned(fpk4), 'Memory allocation form es384 failed');
+                         CR( es384_pk_from_ptr( fpk4, @fPK[0], Length(fPK) ) );
+                    end;
        ctCoseEDDSA: begin
                          fpk2 := eddsa_pk_new;
                          assert(Assigned(fpk2), 'Memory allocation for EDDSA failed');
@@ -2032,6 +2077,8 @@ begin
         eddsa_pk_free(fpk2);
      if Assigned(fpk3) then
         rs256_pk_free(fpk3);
+     if Assigned(fpk4) then
+        es384_pk_free(fPK4);
 
      fPk1 := nil;
      fPK2 := nil;
