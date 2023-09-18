@@ -95,7 +95,32 @@ const WEBAUTHN_API_VERSION_1 = 1;
 //          - WebAuthNDeletePlatformCredential
 //
 
-            WEBAUTHN_API_CURRENT_VERSION = WEBAUTHN_API_VERSION_2;
+            WEBAUTHN_API_VERSION_5 = 5;
+// WEBAUTHN_API_VERSION_5 : Delta From WEBAUTHN_API_VERSION_4
+//      Data Structures and their sub versions:
+//          - WEBAUTHN_CREDENTIAL_DETAILS                       :   2
+//      Extension Changes:
+//          - Enabled LARGE_BLOB Support
+//
+
+            WEBAUTHN_API_VERSION_6 = 6;
+// WEBAUTHN_API_VERSION_6 : Delta From WEBAUTHN_API_VERSION_5
+//      Data Structures and their sub versions:
+//          - WEBAUTHN_AUTHENTICATOR_MAKE_CREDENTIAL_OPTIONS    :   6
+//          - WEBAUTHN_CREDENTIAL_ATTESTATION                   :   5
+//          - WEBAUTHN_ASSERTION                                :   4
+//      Transports:
+//          - WEBAUTHN_CTAP_TRANSPORT_HYBRID
+
+            WEBAUTHN_API_VERSION_7 = 7;
+// WEBAUTHN_API_VERSION_7 : Delta From WEBAUTHN_API_VERSION_6
+//      Data Structures and their sub versions:
+//          - WEBAUTHN_AUTHENTICATOR_MAKE_CREDENTIAL_OPTIONS    :   7
+//          - WEBAUTHN_AUTHENTICATOR_GET_ASSERTION_OPTIONS      :   7
+//          - WEBAUTHN_CREDENTIAL_ATTESTATION                   :   6
+//          - WEBAUTHN_ASSERTION                                :   5
+
+            WEBAUTHN_API_CURRENT_VERSION = WEBAUTHN_API_VERSION_7;
 //+------------------------------------------------------------------------------------------
 // Information about an RP Entity
 //-------------------------------------------------------------------------------------------
@@ -320,8 +345,43 @@ type
 // Credential Information for WebAuthNGetPlatformCredentialList API
 //-------------------------------------------------------------------------------------------
 
+type
+  _CTAPCBOR_HYBRID_STORAGE_LINKED_DATA = packed record
+    // Version
+    dwVersion : DWORD;
+
+    // Contact Id
+    cbContactId : DWORD;
+    //_Field_size_bytes_(cbContactId)
+    pbContactId : PBYTE;
+
+    // Link Id
+    cbLinkId : DWORD;
+    //_Field_size_bytes_(cbLinkId)
+    pbLinkId : PBYTE;
+
+    // Link secret
+    cbLinkSecret : DWORD;
+    //_Field_size_bytes_(cbLinkSecret)
+    pbLinkSecret : PBYTE;
+
+    // Authenticator Public Key
+    cbPublicKey : DWORD;
+    // _Field_size_bytes_(cbPublicKey)
+    pbPublicKey : PBYTE;
+
+    // Authenticator Name
+    pwszAuthenticatorName : PCWSTR;
+
+    // Tunnel server domain
+    wEncodedTunnelServerDomain : WORD;
+  end;
+  CTAPCBOR_HYBRID_STORAGE_LINKED_DATA = _CTAPCBOR_HYBRID_STORAGE_LINKED_DATA;
+  PCTAPCBOR_HYBRID_STORAGE_LINKED_DATA = ^CTAPCBOR_HYBRID_STORAGE_LINKED_DATA;
+
 const WEBAUTHN_CREDENTIAL_DETAILS_VERSION_1 = 1;
-      WEBAUTHN_CREDENTIAL_DETAILS_CURRENT_VERSION = WEBAUTHN_CREDENTIAL_DETAILS_VERSION_1;
+      WEBAUTHN_CREDENTIAL_DETAILS_VERSION_2 = 2;
+      WEBAUTHN_CREDENTIAL_DETAILS_CURRENT_VERSION = WEBAUTHN_CREDENTIAL_DETAILS_VERSION_2;
 
 type
   _WEBAUTHN_CREDENTIAL_DETAILS = packed record
@@ -341,6 +401,13 @@ type
 
     // Removable or not.
     bRemovable : BOOL;
+
+    //
+    // The following fields have been added in WEBAUTHN_CREDENTIAL_DETAILS_VERSION_2
+    //
+
+    // Backed Up or not.
+    bBackedUp : BOOL;
   end;
   WEBAUTHN_CREDENTIAL_DETAILS = _WEBAUTHN_CREDENTIAL_DETAILS;
   PWEBAUTHN_CREDENTIAL_DETAILS = ^WEBAUTHN_CREDENTIAL_DETAILS;
@@ -411,13 +478,14 @@ type
 
 type
   _WEBAUTHN_CRED_WITH_HMAC_SECRET_SALT = packed record
-    // Size of pbCredID.
+     // Size of pbCredID.
     cbCredID : DWORD;
     //_Field_size_bytes_(cbCredID)
     pbCredID : PBYTE;                                 // Required
 
     // PRF Values for above credential
     pHmacSecretSalt : PWebAuthnHMACSecretSalt;     // Required
+
   end;
   WEBAUTHN_CRED_WITH_HMAC_SECRET_SALT = _WEBAUTHN_CRED_WITH_HMAC_SECRET_SALT;
   TWebAuthCredWithHMACSecretSalt = _WEBAUTHN_CRED_WITH_HMAC_SECRET_SALT;
@@ -585,7 +653,9 @@ const WEBAUTHN_AUTHENTICATOR_ATTACHMENT_ANY = 0;
       WEBAUTHN_AUTHENTICATOR_MAKE_CREDENTIAL_OPTIONS_VERSION_3 = 3;
       WEBAUTHN_AUTHENTICATOR_MAKE_CREDENTIAL_OPTIONS_VERSION_4 = 4;
       WEBAUTHN_AUTHENTICATOR_MAKE_CREDENTIAL_OPTIONS_VERSION_5 = 5;
-      WEBAUTHN_AUTHENTICATOR_MAKE_CREDENTIAL_OPTIONS_CURRENT_VERSION = WEBAUTHN_AUTHENTICATOR_MAKE_CREDENTIAL_OPTIONS_VERSION_5;
+      WEBAUTHN_AUTHENTICATOR_MAKE_CREDENTIAL_OPTIONS_VERSION_6 = 6;
+      WEBAUTHN_AUTHENTICATOR_MAKE_CREDENTIAL_OPTIONS_VERSION_7 = 7;
+      WEBAUTHN_AUTHENTICATOR_MAKE_CREDENTIAL_OPTIONS_CURRENT_VERSION = WEBAUTHN_AUTHENTICATOR_MAKE_CREDENTIAL_OPTIONS_VERSION_7;
 
 type
   _WEBAUTHN_AUTHENTICATOR_MAKE_CREDENTIAL_OPTIONS = packed record
@@ -655,6 +725,25 @@ type
     // Optional. BrowserInPrivate Mode. Defaulting to FALSE.
     bBrowserInPrivateMode : BOOL;
 
+    //
+    // The following fields have been added in WEBAUTHN_AUTHENTICATOR_MAKE_CREDENTIAL_OPTIONS_VERSION_6
+    //
+
+    // Enable PRF
+    bEnablePrf : BOOL;
+
+    //
+    // The following fields have been added in WEBAUTHN_AUTHENTICATOR_MAKE_CREDENTIAL_OPTIONS_VERSION_7
+    //
+
+    // Optional. Linked Device Connection Info.
+    pLinkedDevice : PCTAPCBOR_HYBRID_STORAGE_LINKED_DATA;
+
+    // Size of pbJsonExt
+    cbJsonExt : DWORD;
+    // _Field_size_bytes_(cbJsonExt)
+    pbJsonExt : PBYTE;
+
   end;
 
   WEBAUTHN_AUTHENTICATOR_MAKE_CREDENTIAL_OPTIONS = _WEBAUTHN_AUTHENTICATOR_MAKE_CREDENTIAL_OPTIONS;
@@ -674,7 +763,8 @@ const WEBAUTHN_CRED_LARGE_BLOB_OPERATION_NONE = 0;
       WEBAUTHN_AUTHENTICATOR_GET_ASSERTION_OPTIONS_VERSION_4 = 4;
       WEBAUTHN_AUTHENTICATOR_GET_ASSERTION_OPTIONS_VERSION_5 = 5;
       WEBAUTHN_AUTHENTICATOR_GET_ASSERTION_OPTIONS_VERSION_6 = 6;
-      WEBAUTHN_AUTHENTICATOR_GET_ASSERTION_OPTIONS_CURRENT_VERSION = WEBAUTHN_AUTHENTICATOR_GET_ASSERTION_OPTIONS_VERSION_6;
+      WEBAUTHN_AUTHENTICATOR_GET_ASSERTION_OPTIONS_VERSION_7 = 7;
+      WEBAUTHN_AUTHENTICATOR_GET_ASSERTION_OPTIONS_CURRENT_VERSION = WEBAUTHN_AUTHENTICATOR_GET_ASSERTION_OPTIONS_VERSION_7;
 
 (*
     Information about flags.
@@ -752,6 +842,21 @@ type
 
     // Optional. BrowserInPrivate Mode. Defaulting to FALSE.
     bBrowserInPrivateMode : BOOL;
+
+    //
+    // The following fields have been added in WEBAUTHN_AUTHENTICATOR_GET_ASSERTION_OPTIONS_VERSION_7
+    //
+
+    // Optional. Linked Device Connection Info.
+    pLinkedDevice : PCTAPCBOR_HYBRID_STORAGE_LINKED_DATA;
+
+    // Optional. Allowlist MUST contain 1 credential applicable for Hybrid transport.
+    bAutoFill : BOOL;
+
+    // Size of pbJsonExt
+    cbJsonExt : DWORD;
+    // _Field_size_bytes_(cbJsonExt)
+    pbJsonExt : PBYTE;
   end;
   WEBAUTHN_AUTHENTICATOR_GET_ASSERTION_OPTIONS = _WEBAUTHN_AUTHENTICATOR_GET_ASSERTION_OPTIONS;
   PWEBAUTHN_AUTHENTICATOR_GET_ASSERTION_OPTIONS = ^WEBAUTHN_AUTHENTICATOR_GET_ASSERTION_OPTIONS;
@@ -836,7 +941,9 @@ const WEBAUTHN_ATTESTATION_TYPE_PACKED = 'packed';
       WEBAUTHN_CREDENTIAL_ATTESTATION_VERSION_2 = 2;
       WEBAUTHN_CREDENTIAL_ATTESTATION_VERSION_3 = 3;
       WEBAUTHN_CREDENTIAL_ATTESTATION_VERSION_4 = 4;
-      WEBAUTHN_CREDENTIAL_ATTESTATION_CURRENT_VERSION = WEBAUTHN_CREDENTIAL_ATTESTATION_VERSION_4;
+      WEBAUTHN_CREDENTIAL_ATTESTATION_VERSION_5 = 5;
+      WEBAUTHN_CREDENTIAL_ATTESTATION_VERSION_6 = 6;
+      WEBAUTHN_CREDENTIAL_ATTESTATION_CURRENT_VERSION = WEBAUTHN_CREDENTIAL_ATTESTATION_VERSION_6;
 
 type
   _WEBAUTHN_CREDENTIAL_ATTESTATION = packed record
@@ -900,6 +1007,20 @@ type
     bLargeBlobSupported : BOOL;
     bResidentKey : BOOL;
 
+    //
+    // Following fields have been added in WEBAUTHN_CREDENTIAL_ATTESTATION_VERSION_5
+    //
+
+    bPrfEnabled : BOOL;
+
+    //
+    // Following fields have been added in WEBAUTHN_CREDENTIAL_ATTESTATION_VERSION_6
+    //
+
+    cbUnsignedExtensionOutputs : DWORD;
+    // _Field_size_bytes_(cbUnsignedExtensionOutputs)
+    pbUnsignedExtensionOutputs : PBYTE;
+
   end;
   WEBAUTHN_CREDENTIAL_ATTESTATION = _WEBAUTHN_CREDENTIAL_ATTESTATION;
   PWEBAUTHN_CREDENTIAL_ATTESTATION = ^WEBAUTHN_CREDENTIAL_ATTESTATION;
@@ -923,7 +1044,9 @@ const WEBAUTHN_CRED_LARGE_BLOB_STATUS_NONE                  =  0;
       WEBAUTHN_ASSERTION_VERSION_1                          = 1;
       WEBAUTHN_ASSERTION_VERSION_2                          = 2;
       WEBAUTHN_ASSERTION_VERSION_3                          = 3;
-      WEBAUTHN_ASSERTION_CURRENT_VERSION = WEBAUTHN_ASSERTION_VERSION_3;
+      WEBAUTHN_ASSERTION_VERSION_4                          = 4;
+      WEBAUTHN_ASSERTION_VERSION_5                          = 5;
+      WEBAUTHN_ASSERTION_CURRENT_VERSION = WEBAUTHN_ASSERTION_VERSION_5;
 
 type
   _WEBAUTHN_ASSERTION = packed record
@@ -968,6 +1091,22 @@ type
     // Following fields have been added in WEBAUTHN_ASSERTION_VERSION_3
     //
     pHmacSecret : PWebAuthnHMACSecretSalt;
+
+    //
+    // Following fields have been added in WEBAUTHN_ASSERTION_VERSION_4
+    //
+
+    // One of the WEBAUTHN_CTAP_TRANSPORT_* bits will be set corresponding to
+    // the transport that was used.
+    dwUsedTransport : DWORD;
+
+    //
+    // Following fields have been added in WEBAUTHN_ASSERTION_VERSION_5
+    //
+
+    cbUnsignedExtensionOutputs : DWORD;
+    // _Field_size_bytes_(cbUnsignedExtensionOutputs)
+    pbUnsignedExtensionOutputs : PBYTE;
   end;
   WEBAUTHN_ASSERTION = _WEBAUTHN_ASSERTION;
   TWebAutNAssertion = WEBAUTHN_ASSERTION;

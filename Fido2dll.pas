@@ -13,7 +13,7 @@
 // ###################################################################
 
 
-// fido2 dll import file for fido2.dll V 1.12.0 and higher
+// fido2 dll import file for fido2.dll V 1.13.0 and higher
 // the file is basically a conversion of the imported header files of the fido2.dll
 // based on the sources in: https://github.com/Yubico/libfido2
 
@@ -725,6 +725,7 @@ function fido_cred_largeblob_key_ptr(ci : Pfido_cred_t) : PByte; cdecl; external
 function fido_cred_pin_minlen(cred : Pfido_cred_t) : size_t; cdecl; external libFido;
 
 function fido_assert_allow_cred(assert : Pfido_assert_t; ptr : PByte; len : size_t) : integer; cdecl; external libFido;
+function fido_assert_empty_allow_list(assert : Pfido_assert_t) : integer; cdecl; external libFido;
 function fido_assert_set_authdata(assert : Pfido_assert_t; idx : size_t; ptr : PByte; len : size_t) : integer; cdecl; external libFido;
 function fido_assert_set_clientdata_hash(assert : Pfido_assert_t; ptr : PByte; len : size_t) : integer; cdecl; external libFido;
 function fido_assert_set_count(assert : Pfido_assert_t; n : size_t) : integer; cdecl; external libFido;
@@ -742,7 +743,7 @@ function fido_assert_set_authdata_raw(assert : Pfido_assert_t; idx : size_t; ptr
 function fido_assert_set_clientdata(assert : Pfido_assert_t; ptr : PAnsiChar; len : size_t): integer; cdecl; external libFido;
 function fido_assert_sigcount(assert : Pfido_assert_t; idx : size_t): UInt32; cdecl; external libFido;
 
-
+function fido_cred_empty_exclude_list(cred : Pfido_cred_t) : integer; cdecl; external libFido;
 function fido_cred_exclude(cred : Pfido_cred_t;  ptr : PByte; len : size_t) : integer; cdecl; external libFido;
 function fido_cred_prot(cred : Pfido_cred_t) : integer; cdecl; external libFido;
 function fido_cred_set_attstmt(cred : Pfido_cred_t; ptr : PByte; len : size_t) : integer; cdecl; external libFido;

@@ -413,6 +413,7 @@ type
   TFidoCredCreate = class(TBaseFido2Credentials)
   public
     procedure AddExcludeCred( cred : TBaseFido2Credentials );
+    procedure ClearExcludeList;
 
     function CreateCredentials( dev : TFidoDevice; pin : string ) : boolean;
     function CreateCredentialsAndVerify( dev : TFidoDevice; pin : string ) : boolean;
@@ -515,6 +516,7 @@ type
     property Extensions : integer read fExtensions;
 
     procedure AddAllowedCredential( cred : TBaseFido2Credentials );
+    procedure ClearAllowedList;
     procedure SetHMACSecretSalt( salt : TBytes );
 
     function Perform( dev : TFidoDevice; sPin : string; var cnt : integer ) : boolean;
@@ -1673,6 +1675,12 @@ end;
 // #### Credential Create
 // #########################################################
 
+procedure TFidoCredCreate.ClearExcludeList;
+begin
+     PrepareCredentials;
+     CR( fido_cred_empty_exclude_list( fCred ) );
+end;
+
 function TFidoCredCreate.CreateCredentials(dev: TFidoDevice;
   pin: string): boolean;
 var pPin : PAnsiChar;
@@ -1923,6 +1931,12 @@ begin
      end
      else
          fErr := String( UTF8String( fido_strerr(r) ) );
+end;
+
+procedure TFidoAssert.ClearAllowedList;
+begin
+     assert( Assigned( fAssert ), 'No Assert handle aquired -> call perform first');
+     CR( fido_assert_empty_allow_list( fAssert ) );
 end;
 
 function TFidoAssert.GetAuthData( idx : integer ): TBytes;
