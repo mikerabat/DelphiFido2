@@ -76,7 +76,7 @@ type
     fCBORMinPinLen : UINT64;
     fCBORUVAttempts : UINT64;
     fCBORUVMOdality : UINT64;
-    fCBORRKRemaining : UINT64;
+    fCBORRKRemaining : INT64;
     fCBORNewPinRequired : boolean;
 
     procedure ReadProperties( dev : PFido_dev_t );
@@ -1056,7 +1056,6 @@ begin
         fCBORMaxCredidlen := fido_cbor_info_maxcredidlen(ci);
         fCBORMaxBlobLen := fido_cbor_info_maxcredbloblen(ci);
         fCBORFWVersion := fido_cbor_info_fwversion(ci);
-
         fCBORMaxrpidMinpinlen := fido_cbor_info_maxrpid_minpinlen(ci);
         fCBORMinPinLen := fido_cbor_info_minpinlen(ci);
         fCBORUVAttempts := fido_cbor_info_uv_attempts(ci);
@@ -2037,7 +2036,6 @@ begin
         // verification!
         r := fido_assert_verify(fAssert, 0, Integer(fAssertType), GetKeyPtr);
         Result := r = FIDO_OK;
-
         if not Result then
            fErr := String( fido_strerr(r) );
      finally
