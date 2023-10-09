@@ -69,4 +69,4 @@ Installation:
 # WebAuthn
 
 Microsoft implements it's own _WebAuthn_ functionality by the 'webauthn.dll'. There is also a project included here that
-shows how to use that functionality in Delphi - check out _WebAuthDLLTest_ project for that purpose. Version 4 is the current verison.
+shows how to use that functionality in Delphi - check out _WebAuthDLLTest_ project for that purpose. Version 7 is the current verison.
