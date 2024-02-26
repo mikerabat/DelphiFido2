@@ -25,7 +25,7 @@ unit FileFidoDataHandling;
 
 interface
 
-uses SysUtils, Classes, WebauthnUtil, AuthData, Fido2, SuperObject;
+uses SysUtils, Classes, WebauthnHandler, AuthData, Fido2, SuperObject;
 
 // ###########################################
 // #### User handling based on simple files
@@ -40,18 +40,33 @@ type
     function EnterGlobalMutex : boolean;
     procedure LeaveGlobalMutex;
   public
+    procedure CleanupPendingChallenges(aChallenge : string = '');
     function IsAlreadRegistered( uname : string ) : boolean; overload;
-    function IsAlreadRegistered( uname : string; var credID : string ) : boolean; overload;
+    function IsAlreadRegistered( uname : string; var credIDFN : string ) : boolean; overload;
 
-    function IsChallengeInitiated( challenge : string ) : boolean;
+    function IsChallengeInitiated( challenge : string; var data : ISuperObject ) : boolean;
+    function CredentialDataFromId(credId: string; var data : string): TFidoCredentialFmt;
 
     procedure SaveUserInitChallenge( user : TFidoUserStartRegister );
-    procedure SaveCred( challenge : string; cred : TFidoCredVerify; authData : TAuthData );
-    function CredToUser(credId: string; var uname: string): boolean;
+    function SaveCred( fmt : string; id : string; userHandle : string; challenge : string; cred : TFidoCredVerify; authData : TAuthData ) : boolean;
 
-    function CheckSigCounter(credId: string; authData: TAuthData): boolean;
+    function CredToUser(credId: string; var uname: string): boolean;
     procedure SaveAssertChallengeData( challenge : ISuperObject );
     function LoadAssertChallengeData( challenge : string ) : ISuperObject;
+    function CheckSigCounter(credId: string; authData: TAuthData): boolean;
+
+    //function IsAlreadRegistered( uname : string ) : boolean; overload;
+//    function IsAlreadRegistered( uname : string; var credID : string ) : boolean; overload;
+//
+//    function IsChallengeInitiated( challenge : string ) : boolean;
+//
+//    procedure SaveUserInitChallenge( user : TFidoUserStartRegister );
+//    procedure SaveCred( challenge : string; cred : TFidoCredVerify; authData : TAuthData );
+//    function CredToUser(credId: string; var uname: string): boolean;
+//
+//    function CheckSigCounter(credId: string; authData: TAuthData): boolean;
+//    procedure SaveAssertChallengeData( challenge : ISuperObject );
+//    function LoadAssertChallengeData( challenge : string ) : ISuperObject;
 
     constructor Create;
     destructor Destroy; override;
@@ -68,6 +83,11 @@ function TFileFidoDatarHandling.IsAlreadRegistered(uname: string): boolean;
 var credIDFN : string;
 begin
      Result := IsAlreadRegistered(uname, credIDFN);
+end;
+
+procedure TFileFidoDatarHandling.CleanupPendingChallenges(aChallenge: string);
+begin
+
 end;
 
 constructor TFileFidoDatarHandling.Create;
@@ -99,6 +119,39 @@ begin
      assert( (fGlobCS <> 0), 'Cannot create a global semaphore');
 
      inherited Create;
+end;
+
+function TFileFidoDatarHandling.CredentialDataFromId(credId: string;
+  var data: string): TFidoCredentialFmt;
+var sr : TSearchRec;
+    aFmt : string;
+begin
+     data := '';
+     Result := fmNone;
+     if FindFirst( credID + '.*.cred', faArchive, sr ) = 0 then
+     begin
+          with TStringList.Create do
+          try
+             LoadFromFile(sr.Name);
+             data := Text;
+          finally
+                 Free;
+          end;
+
+          aFmt := Copy(sr.Name, 1, Length(sr.Name) - Length('.cred'));
+          aFmt := ExtractFileExt(aFmt);
+
+          if SameText(aFmt, 'packed')
+          then
+              Result := fmFido2
+          else if SameText(aFmt, 'fido-u2f')
+          then
+              Result := fmU2F
+          else if SameText(aFmt, 'tpm')
+          then
+              Result := fmTPM;
+     end;
+     SysUtils.FindClose(sr);
 end;
 
 function TFileFidoDatarHandling.CredToUser(credId: string;
@@ -159,7 +212,7 @@ begin
 end;
 
 function TFileFidoDatarHandling.IsAlreadRegistered(uname: string;
-  var credID: string): boolean;
+  var credIDFN: string): boolean;
 var idx : integer;
 begin
      Result := True;
@@ -177,7 +230,7 @@ begin
            Result := idx  >= 0;
 
            if Result then
-              credID := ValueFromIndex[idx];
+              credIDFN := ValueFromIndex[idx];
         finally
                Free;
         end;
@@ -186,13 +239,24 @@ begin
      end;
 end;
 
-function TFileFidoDatarHandling.IsChallengeInitiated(challenge: string): boolean;
+function TFileFidoDatarHandling.IsChallengeInitiated(challenge: string; var data : ISuperObject): boolean;
 var userDataFn : string;
 begin
      userDataFn := Base64UrlFixup( challenge ) + '.json';
 
      // check if the challenge was requested here -> we can associate it with the user now ;)
      Result := FileExists( fDataPath + userDataFn );
+
+     if Result then
+     begin
+          with TStringList.Create do
+          try
+             LoadFromFile(userDataFN);
+             data := SO( Text );
+          finally
+                 Free;
+          end;
+     end;
 end;
 
 procedure TFileFidoDatarHandling.LeaveGlobalMutex;
@@ -243,14 +307,14 @@ begin
      end;
 end;
 
-procedure TFileFidoDatarHandling.SaveCred(challenge: string; cred: TFidoCredVerify;
-  authData: TAuthData);
+function TFileFidoDatarHandling.SaveCred(fmt : string; id : string; userHandle : string;
+  challenge : string; cred : TFidoCredVerify; authData : TAuthData) : boolean;
 var userFn : string;
+    sCred : UTF8String;
     clientData : ISuperObject;
     credData : ISuperObject;
-    credIDBase64 : string;
-    credID : TBytes;
 begin
+     Result := False;
      if EnterGlobalMutex then
      try
         userFn := fDataPath + Base64UrlFixup( challenge ) + '.json';
@@ -264,30 +328,43 @@ begin
                Free;
         end;
 
-        credID := cred.CredID;
-        credIDBase64 := Base64URLEncode( @credID[0], Length(credID) );
+        if SameText(fmt, 'none') then
+        begin
+             // none has only the public key stored in authData ->
+             sCred := UTF8String( Base64URLEncode(authData.RawData) );
 
-        credData := SO;
-        credData.S['cert.pk'] := credIDBase64 + '.pk';
-        credData.S['cert.sig'] := credIDBase64 + '.sig';
-        credData.S['cert.x5c'] := credIDBase64 + '.x5c';
+             with TFileStream.Create( id + '.' + fmt + '.cred', fmCreate ) do
+             try
+                WriteBuffer( sCred[1], Length(sCred)*Sizeof(AnsiChar));
+             finally
+                    Free;
+             end;
+        end
+        else
+        begin
+             credData := SO;
+             credData.S['cert.pk'] := id + '.pk';
+             credData.S['cert.sig'] := id + '.sig';
+             credData.S['cert.x5c'] := id + '.x5c';
 
-        cred.SavePKToFile(fDataPath + credIDBase64 + '.pk');
-        cred.SaveSigToFile(fDataPath + credIDBase64 + '.sig');
-        cred.SaveX5cToFile(fDataPath + credIDBase64 + '.x5c');
+             cred.SavePKToFile(fDataPath + id + '.pk');
+             cred.SaveSigToFile(fDataPath + id + '.sig');
+             cred.SaveX5cToFile(fDataPath + id + '.x5c');
 
-        credData.O['user'] := clientData.O['publicKey.user'].Clone;
+             credData.O['user'] := clientData.O['publicKey.user'].Clone;
+             credDAta.SaveTo(id + '.' + fmt + '.cred');
+        end;
 
         // link the credential to the username...
         with TStringList.Create do
         try
            if FileExists(fUserFile) then
               LoadFromFile( fUserFile );
-           Add(clientData.S['publicKey.user.name'] + '=' + credIDBase64);
+           Add(clientData.S['publicKey.user.name'] + '=' + id);
 
            // -> add the user handle to the file
            if clientData.S['publicKey.user.id'] <> '' then
-              Add(clientData.S['publicKey.user.id'] + '=' + credIDBase64);
+              Add(clientData.S['publicKey.user.id'] + '=' + id);
 
            SaveToFile( fUserFile );
         finally
@@ -301,7 +378,7 @@ begin
            if FileExists(fSigCounterFile) then
               LoadFromFile( fSigCounterFile );
 
-           Add( credIDBase64 + '=' + IntToStr(authData.SigCount));
+           Add( id + '=' + IntToStr(authData.SigCount));
            SaveToFile( fSigCounterFile );
         finally
                Free;
@@ -373,6 +450,6 @@ begin
 end;
 
 initialization
-  SetFidoDataHandler(TFileFidoDatarHandling.Create);
+  SetDefFidoDataHandler(TFileFidoDatarHandling.Create);
 
 end.

@@ -18,8 +18,8 @@ unit uWebAuth;
 
 interface
 
-uses SysUtils, Classes, {$IF CompilerVersion >= 23.0} Web.HTTPApp {$ELSE} HTTPApp {$ENDIF},
-     authData, superobject, WebauthnUtil, Fido2, winCryptRandom;
+uses SysUtils, Classes, {$IF CompilerVersion >= 23.0} Web.HTTPApp {$ELSE} HTTPApp {$ifend},
+     authData, superobject, WebauthnHandler, Fido2, winCryptRandom;
 
 type
   TResponseHeaderType = (rtJSON, rtPNG, rtHTML, rtPDF, rtCSV, rtXML, rtBinary, rtZip, rtExe);
@@ -57,7 +57,7 @@ var modFidoWebauthn: TmodFidoWebauthn;
 
 implementation
 
-uses Fido2Dll, cbor, Windows;
+uses Fido2Dll, cbor, Windows, FileFidoDataHandling;
 
 {$R *.dfm}
 
@@ -180,14 +180,17 @@ procedure TmodFidoWebauthn.modWebAuthwaAssertAction(Sender: TObject;
   Request: TWebRequest; Response: TWebResponse; var Handled: Boolean);
 var s : string;
     err : ISuperObject;
+    uname : string;
 begin
      prepareResponse(Response);
 
      try
+        s := '';
+        uname := '';
         with TFidoUserAssert.Create(fRand) do
         try
-           if VerifyAssert(Request.Content, s) then
-              OutputDebugString('Successfully logged in');
+           if VerifyAssert(Request.Content, s, uname) then
+              OutputDebugString(PChar('Successfully logged in as ' + uname));
 
            Response.Content := s;
         finally
@@ -235,6 +238,7 @@ end;
 procedure TmodFidoWebauthn.modWebAuthwaEnrollVerifyAction(Sender: TObject;
   Request: TWebRequest; Response: TWebResponse; var Handled: Boolean);
 var err : ISuperObject;
+    jsonRes, uname : string;
 begin
      prepareResponse(Response);
 
@@ -243,7 +247,15 @@ begin
         // #### Run the verification process on the content data
         with TFidoUserRegisterVerify.Create do
         try
-           Response.Content := VerifyAndSaveCred( Request.Content );
+           if VerifyAndSaveCred( Request.Content, jsonRes, uname ) then
+           begin
+                // create session cookie here
+                Response.Content := jsonRes;
+           end
+           else
+           begin
+                Response.Content := jsonRes;
+           end;
         finally
                Free;
         end;
@@ -281,7 +293,7 @@ begin
           exit;
      end;
 
-     if FidoDataHandler.IsAlreadRegistered(uname)
+     if GetDefFidoDataHandler.IsAlreadRegistered(uname)
      then
          response.Content := '{"result":2,"msg":"User already exists"}'
      else
@@ -296,5 +308,7 @@ end;
 initialization
   fido_init(cFidoInitDebug);
   fido_set_log_handler(fidoLogHandler);
+
+  SetDefFidoDataHandler( TFileFidoDatarHandling.Create );
 
 end.

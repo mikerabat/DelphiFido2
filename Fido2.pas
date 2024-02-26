@@ -306,7 +306,7 @@ type
 // ###################################################
 type
   TFidoCredentialType = (ctCOSEES256 = COSE_ES256, ctCoseEDDSA = COSE_EDDSA, ctCoseES384 = COSE_ES384, ctCoseRS256 = COSE_RS256);
-  TFidoCredentialFmt = (fmDef, fmFido2, fmU2F);
+  TFidoCredentialFmt = (fmNone, fmFido2, fmU2F, fmTPM);
 
   TBaseFido2Credentials = class(TObject)
   private
@@ -1151,7 +1151,7 @@ begin
 
      fResidentKey := FIDO_OPT_OMIT;
      fUserIdentification := FIDO_OPT_OMIT;
-     fFmt := fmDef;
+     fFmt := fmNone;
 
      inherited Create;
 end;
@@ -1187,8 +1187,10 @@ begin
 
      // format
      case fFmt of
+       fmNone:  CR( fido_cred_set_fmt( fCred, 'none') );
        fmFido2: CR( fido_cred_set_fmt( fCred, 'packed'));
        fmU2F:   CR( fido_cred_set_fmt( fCred, 'fido-u2f'));
+       fmTPM:   CR( fido_cred_set_fmt( fCred, 'tpm') );
      end;
 
      fSFmt := UTf8String(fido_cred_fmt(fCred));
@@ -1630,7 +1632,7 @@ begin
 
      fCredType := fromCred.fCredType;
      fsFmt := UTF8String(fido_cred_fmt( fromCred.fCred ));
-     fFmt := fmDef;
+     fFmt := fmNone;
      if fsFmt = 'packed' then
         fFmt := fmFido2;
      if fsFmt = 'fido-u2f' then
