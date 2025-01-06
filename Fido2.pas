@@ -318,6 +318,8 @@ type
     procedure SetClientData(const Value: string);
     function GetMinPinLen: integer;
     procedure SetMinPinLen(const Value: integer);
+    function GetX5CListLen(index: integer): integer;
+    function GetX5CListCount: integer;
   protected
     fCred : Pfido_cred_t;
     fCredType : TFidoCredentialType;
@@ -379,6 +381,9 @@ type
     property ClientData : string read fClientData write SetClientData;
     property SigCount : Integer read GetCredSigCount;
     property MinPinLen : integer read GetMinPinLen write SetMinPinLen;
+
+    property x5cListCount : integer read GetX5CListCount;
+    property x5cListLen[index : integer] : integer read GetX5CListLen;
 
     property AAGuid : TBytes read GetAAGuid;
 
@@ -507,8 +512,10 @@ type
     function GetHMAC(idx: integer): TBytes;
     function GetLargeBlob( idx : integer ): TBytes;
     function GetSmallBlob( idx : integer ): TBytes;
+    function GetAuthDataRaw(idx: integer): TBytes;
   public
     property AuthData[ idx : integer] : TBytes read GetAuthData;
+    property AuthDataRaw[ idx : integer ] : TBytes read GetAuthDataRaw;
     property Sig[ idx : integer ] : TBytes read GetSig;
     property HMACSecret[ idx : integer ] : TBytes read GetHMAC;
     property LargeBlob[ idx : Integer ] : TBytes read GetLargeBlob;
@@ -1408,6 +1415,22 @@ begin
      Result := fido_cred_pin_minlen( fCred );
 end;
 
+function TBaseFido2Credentials.GetX5CListCount: integer;
+begin
+     if fCred = nil then
+        raise EFidoPropertyException.Create('No credentials');
+
+     Result := fido_cred_x5c_list_count( fCred );
+end;
+
+function TBaseFido2Credentials.GetX5CListLen(index: integer): integer;
+begin
+     if fCred = nil then
+        raise EFidoPropertyException.Create('No credentials');
+
+     Result := fido_cred_x5c_list_len( fCred, index );
+end;
+
 procedure TBaseFido2Credentials.PrepareCredentials;
 begin
      InitCred;
@@ -1944,6 +1967,12 @@ function TFidoAssert.GetAuthData( idx : integer ): TBytes;
 begin
      assert( Assigned( fAssert ), 'No Assert handle aquired -> call perform first');
      Result := ptrToByteArr( fido_assert_authdata_ptr( fAssert, idx ), fido_assert_authdata_len( fAssert, idx) );
+end;
+
+function TFidoAssert.GetAuthDataRaw(idx: integer): TBytes;
+begin
+     assert( Assigned( fAssert ), 'No Assert handle aquired -> call perform first');
+     Result := ptrToByteArr( fido_assert_authdata_raw_ptr( fAssert, idx ), fido_assert_authdata_raw_len( fAssert, idx) );
 end;
 
 function TFidoAssert.GetSig( idx : integer ): TBytes;
