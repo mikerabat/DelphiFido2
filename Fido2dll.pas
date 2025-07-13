@@ -13,7 +13,7 @@
 // ###################################################################
 
 
-// fido2 dll import file for fido2.dll V 1.15.0 and higher
+// fido2 dll import file for fido2.dll V 1.16.0 and higher
 // the file is basically a conversion of the imported header files of the fido2.dll
 // based on the sources in: https://github.com/Yubico/libfido2
 
@@ -27,6 +27,7 @@ interface
 const libFido = 'fido2.dll';
 
 {$DEFINE FIDODLL_V1_15}
+{$DEFINE FIDODLL_V1_16}
 
 {$MinEnumSize 4}  // C headers seem to have 4 bytes minimum enum size
 
@@ -195,6 +196,12 @@ const CTAP_AUTHDATA_USER_PRESENT	= $01;
       FIDO_EXT_LARGEBLOB_KEY = $04;
       FIDO_EXT_CRED_BLOB	= $08;
       FIDO_EXT_MINPINLEN	= $10;
+
+// Supported enterprise attestation modes.
+// to be used with fido_cred_set_entattest. Default is 0
+      FIDO_ENTATTEST_NONE = 0;
+      FIDO_ENTATTEST_VENDOR	= 1;
+      FIDO_ENTATTEST_PLATFORM	= 2;
 
 
 // supported credential protection policies
@@ -756,6 +763,9 @@ function fido_assert_set_clientdata(assert : Pfido_assert_t; ptr : PAnsiChar; le
 function fido_assert_sigcount(assert : Pfido_assert_t; idx : size_t): UInt32; cdecl; external libFido;
 
 function fido_cred_empty_exclude_list(cred : Pfido_cred_t) : integer; cdecl; external libFido;
+{$IFDEF FIDODLL_V1_16}
+function fido_cred_entattest(cred : Pfido_cred_t) : boolean; cdecl; external libFido;
+{$ENDIF}
 function fido_cred_exclude(cred : Pfido_cred_t;  ptr : PByte; len : size_t) : integer; cdecl; external libFido;
 function fido_cred_prot(cred : Pfido_cred_t) : integer; cdecl; external libFido;
 function fido_cred_set_attstmt(cred : Pfido_cred_t; ptr : PByte; len : size_t) : integer; cdecl; external libFido;
@@ -764,6 +774,9 @@ function fido_cred_set_attobj(cred : Pfido_cred_t; ptr: PByte; len : size_t) : i
 {$ENDIF}
 function fido_cred_set_authdata(cred : Pfido_cred_t; ptr : PByte; len : size_t) : integer; cdecl; external libFido;
 function fido_cred_set_clientdata_hash(cred : Pfido_cred_t; ptr : PByte; len : size_t) : integer; cdecl; external libFido;
+{$IFDEF FIDODLL_V1_16}
+function fido_cred_set_entattest(cred : Pfido_cred_t; ea : integer) : integer;  cdecl; external libFido;
+{$ENDIF}
 function fido_cred_set_extensions(cred : Pfido_cred_t; flags : integer) : integer; cdecl; external libFido;
 function fido_cred_set_fmt(cred : Pfido_cred_t; ptr : PAnsiChar) : integer; cdecl; external libFido;
 function fido_cred_set_id(cred : Pfido_cred_t; ptr : PAnsiChar; len : size_t) : integer; cdecl; external libFido;

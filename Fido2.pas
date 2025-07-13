@@ -18,6 +18,8 @@ interface
 
 uses SysUtils, Classes, Fido2dll, Generics.Collections, cbor;
 
+{$DEFINE FIDODLL_V1_16}
+
 type
   EFidoBaseException = class(Exception);
   EFidoAllocException = class(EFidoBaseException);
@@ -307,9 +309,11 @@ type
 type
   TFidoCredentialType = (ctCOSEES256 = COSE_ES256, ctCoseEDDSA = COSE_EDDSA, ctCoseES384 = COSE_ES384, ctCoseRS256 = COSE_RS256);
   TFidoCredentialFmt = (fmNone, fmFido2, fmU2F, fmTPM);
+  TFidoEnterpriseAttestation = (eaNone, eaVendor, eaPlatform);
 
   TBaseFido2Credentials = class(TObject)
   private
+    fMode: TFidoEnterpriseAttestation;
     function GetCredID: TBytes;
     function GetAAGuid: TBytes;
     function GetCredSigCount: Integer;
@@ -320,6 +324,7 @@ type
     procedure SetMinPinLen(const Value: integer);
     function GetX5CListLen(index: integer): integer;
     function GetX5CListCount: integer;
+    procedure SetMode(const Value: TFidoEnterpriseAttestation);
   protected
     fCred : Pfido_cred_t;
     fCredType : TFidoCredentialType;
@@ -381,6 +386,7 @@ type
     property ClientData : string read fClientData write SetClientData;
     property SigCount : Integer read GetCredSigCount;
     property MinPinLen : integer read GetMinPinLen write SetMinPinLen;
+    property Mode : TFidoEnterpriseAttestation read fMode write SetMode;
 
     property x5cListCount : integer read GetX5CListCount;
     property x5cListLen[index : integer] : integer read GetX5CListLen;
@@ -1231,6 +1237,10 @@ begin
      if fMinPinLen > 0 then
         CR( fido_cred_set_pin_minlen( fcred, fMinPinLen ) );
 
+     {$IFDEF FIDODLL_V1_16}
+     CR( fido_cred_set_entattest( fcred, Integer( fMode ) ) );
+     {$ENDIF}
+
      // resident key
      CR( fido_cred_set_rk( fcred, fResidentKey ) );
      CR( fido_cred_set_uv( fcred, fUserIdentification ) );
@@ -1307,6 +1317,13 @@ end;
 procedure TBaseFido2Credentials.SetMinPinLen(const Value: integer);
 begin
      fMinPinLen := value;
+     UpdateCredentials;
+end;
+
+procedure TBaseFido2Credentials.SetMode(
+  const Value: TFidoEnterpriseAttestation);
+begin
+     fMode := Value;
      UpdateCredentials;
 end;
 
