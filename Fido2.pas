@@ -19,6 +19,7 @@ interface
 uses SysUtils, Classes, Fido2dll, Generics.Collections, cbor;
 
 {$DEFINE FIDODLL_V1_16}
+{$DEFINE FIDODLL_V1_17}
 
 type
   EFidoBaseException = class(Exception);
@@ -81,6 +82,22 @@ type
     fCBORRKRemaining : INT64;
     fCBORNewPinRequired : boolean;
 
+    {$IFDEF FIDODLL_V1_17}
+    fCBORAttFmts : TSTringList;
+    fCBORUV_Since_Pin : Int64;
+    fCBORLongTouchReset : boolean;
+    fCBORResetTransports : TStringList;
+    fCBORMaxPinLen : UInt64;
+    fCBORPinPolicy : integer;
+
+    // todo puat
+
+    function GetResetTransports(index: integer): string;
+    function GetResetTransportsCount: integer;
+    function GetAttFmts(index: integer): string;
+    function GetAttFmtsCount: integer;
+  {$ENDIF}
+
     procedure ReadProperties( dev : PFido_dev_t );
     function GetOption(index: integer): TFido2CBOROption;
     function GetOptionsCnt: integer;
@@ -106,6 +123,16 @@ type
     property CoseAlgorithmCnt : integer read GetCoseAlgorithmCnt;
     property CoseAlgorithms[index : integer] : integer read GetCoseAlgorithm;
 
+    {$IFDEF FIDODLL_V1_17}
+    property UVSincePin : int64 read fCBORUV_Since_Pin;
+    property LongTouchReset : boolean read fCBORLongTouchReset;
+    property MaxPinLen : UInt64 read fCBORMaxPinLen;
+    property ResetTransportsCount : integer read GetResetTransportsCount;
+    property ResetTransports[index : integer] : string read GetResetTransports;
+    property AttFmts[index : integer] : string read GetAttFmts;
+    property AttFmtsCount : integer read GetAttFmtsCount;
+    property PinPolicy : integer read fCBORPinPolicy;
+    {$ENDIF}
 
     function UUIDToGuid : String;
 
@@ -160,6 +187,10 @@ type
     function GetLargeBlobRaw: TBytes;
     function GetLargeBlob: TCborItem;
     function GetLargeBlobKey(key: TBytes): TBytes;
+    {$IFDEF FIDODLL_V1_17}
+    function GetPUAT: TBytes;
+    procedure SetPUAT(const Value: TBytes);
+    {$ENDIF}
   protected
     procedure ReadProperties(di : Pfido_dev_info_t);
     procedure ReadDev;
@@ -196,6 +227,11 @@ type
     property LargeBlobRaw : TBytes read GetLargeBlobRaw;
     property LargeBlobArr : TCborItem read GetLargeBlob;
     property LargeBlob[ key : TBytes ] : TBytes read GetLargeBlobKey;
+
+    {$IFDEF FIDODLL_V1_17}
+    property PUAT : TBytes read GetPUAT write SetPUAT;
+    {$ENDIF}
+
 
     procedure SetLargeBlobArr( data : TBytes; pin : string ); overload;
     procedure SetLargeBlob( key, data : TBytes; pin : string );
@@ -325,6 +361,7 @@ type
     function GetX5CListLen(index: integer): integer;
     function GetX5CListCount: integer;
     procedure SetMode(const Value: TFidoEnterpriseAttestation);
+    procedure SetHMACSecretValue(const Value: TBytes);
   protected
     fCred : Pfido_cred_t;
     fCredType : TFidoCredentialType;
@@ -333,12 +370,15 @@ type
     fRelyingPartyName : string;
     fClientDataHash : TFidoSHA256Hash;      // client data hash
     fEnableHMACSecret : boolean;
-    fHMACSecret: UTF8String;
     fResidentKey : fido_opt_t;              // create a resident key on the device
     fUserIdentification : fido_opt_t;
     fLargeBlockKeyFlag : boolean;
     fSmallBlob : TBytes;
     fMinPinLen : integer;
+
+    {$IFDEF FIDODLL_V1_17}
+    fHMACSecret: TBytes;
+    {$ENDIF}
 
     // user identification
     fUserName, fDisplaNamy : string;
@@ -387,6 +427,9 @@ type
     property SigCount : Integer read GetCredSigCount;
     property MinPinLen : integer read GetMinPinLen write SetMinPinLen;
     property Mode : TFidoEnterpriseAttestation read fMode write SetMode;
+    {$IFDEF FIDODLL_V1_17}
+    property HMACSecret : TBytes read fHMACSecret write SetHMACSecretValue;
+    {$ENDIF}
 
     property x5cListCount : integer read GetX5CListCount;
     property x5cListLen[index : integer] : integer read GetX5CListLen;
@@ -452,7 +495,7 @@ type
                         aRelyingPartyID, aRelyingPartyName : string;
                         authData : TBytes;
                         x509 : TBytes; Sig : TBytes; rk, uv : boolean;
-                        ext : integer; smallBlob : TBytes); overload;
+                        ext : integer; smallBlob : TBytes{$IFDEF FIDODLL_V1_17}; HMACSecret : TBytes {$ENDIF}); overload;
     destructor Destroy; override;
   end;
 
@@ -467,7 +510,7 @@ type
     fAssertType : TFidoCredentialType;
 
     fRelyingParty : string;
-    fHMACSecret : UTF8String;
+    fHMACSecret : TBytes;
     fClientHash : TFidoChallenge;       // challange
     fClientData : string;
     fEnableHMACSecret : boolean;
@@ -484,7 +527,7 @@ type
     procedure SetRelParty(const Value: string);
     procedure SetUserIdent(const Value: fido_opt_t);
     procedure SetUserPresence(const Value: fido_opt_t);
-    procedure SetHMACSecretValue(const Value: UTF8String);
+    procedure SetHMACSecretValue(const Value: TBytes);
     procedure SetClientData(const Value: string);
   protected
     procedure InitAssert;
@@ -496,7 +539,7 @@ type
     property AssertType : TFidoCredentialType read fAssertType write SetAssertType;
     property RelyingParty : string read fRelyingParty write SetRelParty;
     property HMACSecretEnabled : boolean read fEnableHMACSecret write SetHMACSecret;
-    property HMACSecret : UTF8String read fHMACSecret write SetHMACSecretValue;
+    property HMACSecret : TBytes read fHMACSecret write SetHMACSecretValue;
     property UserVerification : fido_opt_t read fUserVerification write SetUserIdent;
     property Fmt : TFidoCredentialFmt read fFmt write SetFmt;
     property UserPresence : fido_opt_t read fUserPresence write SetUserPresence;
@@ -906,6 +949,20 @@ begin
         errStr := String( fido_strerr( r ) );
 end;
 
+{$IFDEF FIDODLL_V1_17}
+procedure TFidoDevice.SetPUAT(const Value: TBytes);
+var ptr : PByte;
+begin
+     assert( Assigned( fDev ), 'Error no device opened');
+
+     ptr := nil;
+     if Length(value) > 0 then
+        ptr := @Value[0];
+
+     CR( fido_dev_set_puat( fDev, ptr, Length(value) ) );
+end;
+{$ENDIF}
+
 procedure TFidoDevice.SetTimeout(ms: integer);
 begin
      assert( Assigned( fDev ), 'Error no device opened');
@@ -964,6 +1021,11 @@ begin
      fCBORTransports := TStringList.Create;
      fCBORCertNames := TStringList.Create;
 
+     {$IFDEF FIDODLL_V1_17}
+     fCBORAttFmts := TSTringList.Create;
+     fCBORResetTransports := TStringList.Create;
+     {$ENDIF}
+
      if dev <> nil then
         ReadProperties(dev);
 
@@ -980,6 +1042,10 @@ var ci : Pfido_cbor_info_t;
     pinProto : PByte;
     pinProtoLen : integer;
     pTransp : PPAnsiChar;
+    pattfmts : PPAnsiChar;
+    pResetFmts : PPAnsiChar;
+    resetFmts : integer;
+    pattfmtsLen : integer;
     transpLen : integer;
     algoCount : integer;
 begin
@@ -1075,6 +1141,35 @@ begin
         fCBORUVMOdality := fido_cbor_info_uv_modality(ci);
         fCBORRKRemaining := fido_cbor_info_rk_remaining(ci);
         fCBORNewPinRequired := fido_cbor_info_new_pin_required(ci);
+
+        {$IFDEF FIDODLL_V1_17}
+        fCBORMaxPinLen := fido_cbor_info_maxpinlen(ci);
+        fCBORUV_Since_Pin := fido_cbor_info_uv_count_since_pin(ci);
+
+        fCBORLongTouchReset := fido_cbor_info_long_touch_reset(ci);
+
+        pattfmts := fido_cbor_info_attfmts_ptr( ci );
+        pattfmtsLen := fido_cbor_info_attfmts_len( ci );
+
+        for i := 0 to pattfmtsLen - 1 do
+        begin
+             fCBORAttFmts.Add( String(pattfmts^) );
+             inc(pattfmts);
+        end;
+
+        resetFmts := fido_cbor_info_reset_transports_len(ci);
+        pResetFmts := fido_cbor_info_reset_transports_ptr(ci);
+
+        for i := 0 to resetFmts - 1 do
+        begin
+             fCBORResetTransports.Add( String(pResetFmts^) );
+             inc(pResetFmts);
+        end;
+
+        fCBORPinPolicy := fido_cbor_info_pin_policy(ci);
+
+        {$ENDIF}
+
      finally
             fido_cbor_info_free(ci);
      end;
@@ -1087,6 +1182,11 @@ begin
      fCBORExtension.Free;
      fCBORTransports.Free;
      fCBORCertNames.Free;
+
+     {$IFDEF FIDODLL_V1_17}
+     fCBORAttFmts.Free;
+     fCBORResetTransports.Free;
+     {$ENDIF}
 
      for i := 0 to Length(fCBOROptions) - 1 do
          fCBOROptions[i].Free;
@@ -1104,7 +1204,7 @@ end;
 
 function TFido2CBOR.GetCertName(index: Integer): string;
 begin
-
+     Result := fCBORCertNames[index];
 end;
 
 function TFido2CBOR.GetCertNameLen: integer;
@@ -1133,6 +1233,32 @@ function TFido2CBOR.GetOptionsCnt: integer;
 begin
      Result := Length(fCBOROptions);
 end;
+
+{$IFDEF FIDODLL_V1_17}
+
+function TFido2CBOR.GetResetTransports(index: integer): string;
+begin
+     assert((index >= 0) and (index < fCBORResetTransports.Count), 'Index out of bounds');
+     Result := fCBORResetTransports[index];
+end;
+
+function TFido2CBOR.GetResetTransportsCount: integer;
+begin
+     Result := fCBORResetTransports.Count;
+end;
+
+function TFido2CBOR.GetAttFmts(index: integer): string;
+begin
+     assert((index >= 0) and (index < fCBORAttFmts.Count), 'Index out of bounds');
+     Result := fCBORAttFmts[index];
+end;
+
+function TFido2CBOR.GetAttFmtsCount: integer;
+begin
+     Result := fCBORAttFmts.Count;
+end;
+
+{$ENDIF}
 
 { TFido2CBOROption }
 
@@ -1241,6 +1367,13 @@ begin
      CR( fido_cred_set_entattest( fcred, Integer( fMode ) ) );
      {$ENDIF}
 
+     {$IFDEF FIDODLL_V1_17}
+     // hmac secret
+     if fEnableHMACSecret and (Length(fHMACSecret) <> 0) then
+        CR( fido_cred_set_hmac_secret( fcred, @fHMACSecret[0], Length(fHMACSecret)) );
+     {$ENDIF}
+
+
      // resident key
      CR( fido_cred_set_rk( fcred, fResidentKey ) );
      CR( fido_cred_set_uv( fcred, fUserIdentification ) );
@@ -1293,6 +1426,12 @@ end;
 procedure TBaseFido2Credentials.SetHMACSecret(const Value: boolean);
 begin
      fEnableHMACSecret := Value;
+     UpdateCredentials;
+end;
+
+procedure TBaseFido2Credentials.SetHMACSecretValue(const Value: TBytes);
+begin
+     fHMACSecret := Value;
      UpdateCredentials;
 end;
 
@@ -1637,7 +1776,8 @@ end;
 constructor TFidoCredVerify.Create(typ: TFidoCredentialType; fmt: TFidoCredentialFmt;
   aRelyingPartyID, aRelyingPartyName : string;
   authData, x509, Sig: TBytes;
-  rk, uv: boolean; ext: integer; smallBlob : TBytes);
+  rk, uv: boolean; ext: integer; smallBlob : TBytes
+{$IFDEF FIDODLL_V1_17}  ; HMACSecret : TBytes {$ENDIF});
 begin
      inherited Create;
 
@@ -1659,6 +1799,9 @@ begin
      else
          fUserIdentification := FIDO_OPT_FALSE;
 
+     {$IFDEF FIDODLL_V1_17}
+     fHMACSecret := Copy(HMACSecret, 0, Length(HMACSecret));
+     {$ENDIF}
      fEnableHMACSecret := (ext and FIDO_EXT_HMAC_SECRET) <> 0;
      fLargeBlockKeyFlag := (ext and FIDO_EXT_LARGEBLOB_KEY) <> 0;
      fSmallBlob := Copy( smallBlob, 0, Length(smallBlob) );
@@ -1694,6 +1837,11 @@ begin
 
      // sig
      fSig := ptrToByteArr(fido_cred_sig_ptr(fromCred.fcred), fido_cred_sig_len(fromCred.fcred) );
+
+     {$IFDEF FIDODLL_V1_17}
+     // hmac secret
+     fHMACSecret := ptrToByteArr(fido_cred_hmac_secret_ptr(fromCred.fCred), fido_cred_hmac_secret_len(fromCred.fCred));
+     {$ENDIF}
 end;
 
 destructor TFidoCredVerify.Destroy;
@@ -1886,7 +2034,7 @@ begin
      UpdateAssert;
 end;
 
-procedure TBaseFidoAssert.SetHMACSecretValue(const Value: UTF8String);
+procedure TBaseFidoAssert.SetHMACSecretValue(const Value: TBytes);
 begin
      fHMACSecret := Value;
      UpdateAssert;
@@ -1949,8 +2097,8 @@ begin
         fExtensions := fExtensions or FIDO_EXT_HMAC_SECRET;
 
      // hmac secret for testing...
-     if fHMACSecret <> '' then
-        CR( fido_assert_set_hmac_secret( fAssert, 0, PByte(@fHMACSecret[1]), Length(fHMACSecret) ) );
+     if fHMACSecret <> nil then
+        CR( fido_assert_set_hmac_secret( fAssert, 0, PByte(@fHMACSecret[0]), Length(fHMACSecret) ) );
 
      // blob support
      if dev.HasBlobSupport then
@@ -2070,8 +2218,8 @@ begin
         UpdateAssert;
 
         // hmac secret for testing...
-        if fHMACSecret <> '' then
-           CR( fido_assert_set_hmac_secret( fAssert, 0, PByte(@fHMACSecret[1]), Length(fHMACSecret) ) );
+        if fHMACSecret <> nil then
+           CR( fido_assert_set_hmac_secret( fAssert, 0, PByte(@fHMACSecret[0]), Length(fHMACSecret) ) );
 
         CR( fido_assert_set_extensions( fAssert, ext ) );
 
@@ -2461,6 +2609,26 @@ begin
      CR( fido_dev_largeblob_get_array( fDev, cborPtr, cborLen ) );
      Result := ptrToByteArr(cborPtr, cborLen);
 end;
+
+{$IFDEF FIDODLL_V1_17}
+function TFidoDevice.GetPUAT: TBytes;
+var len : size_t;
+    ptr : PByte;
+begin
+     Assert( Assigned(fDev), 'error no device assigned');
+
+     Result := nil;
+     len := fido_dev_puat_len( fDev );
+     if len > 0 then
+     begin
+          ptr := fido_dev_puat_ptr( fDev );
+          assert( ptr <> nil, 'Len is non zero but ptr is nil!');
+
+          SetLength(Result, Integer(len));
+          Move(ptr^, Result[0], Length(Result));
+     end;
+end;
+{$ENDIF}
 
 function TFidoDevice.GetTouchStatus(waitMs: integer): integer;
 begin

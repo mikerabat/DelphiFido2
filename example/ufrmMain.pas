@@ -1314,6 +1314,18 @@ begin
              memLog.Lines.Add('MaxCredCntList: ' + IntTostr(dev.CBOR.MaxCredCntList) );
              memLog.Lines.Add('MaxCredIDLen: ' + IntTostr(dev.CBOR.MaxCredIDLen) );
              memLog.Lines.Add('Blob Support: ' + BoolToStr(dev.HasBlobSupport, True ) );
+
+             memLog.Lines.Add('MaxPinLen: ' + IntToStr(dev.CBOR.MaxPinLen) );
+             memLog.Lines.Add('UVSincePin: ' + IntToStr(dev.CBOR.UVSincePin ) );
+             memLog.Lines.Add('LongTouchReset: ' + BoolToStr(dev.CBOR.LongTouchReset, True ) );
+             memLog.Lines.Add('ResetTransportsCount: ' + IntToStr(dev.CBOR.ResetTransportsCount) );
+
+             for j := 0 to dev.CBOR.AttFmtsCount - 1 do
+                 memLog.Lines.Add('Attfmt ' + IntToStr(j) + ': ' + dev.CBOR.AttFmts[j]);
+             for j := 0 to dev.CBOR.ResetTransportsCount - 1 do
+                 memLog.Lines.Add('ResetTransport ' + IntToStr(j) + ': ' + dev.CBOR.ResetTransports[j]);
+
+             memLog.Lines.Add('Pin Policy: ' + IntToStr(dev.CBOR.PinPolicy));
         end;
      finally
             devList.Free;

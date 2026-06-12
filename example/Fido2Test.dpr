@@ -15,6 +15,7 @@
 program Fido2Test;
 
 uses
+  madExcept,
   Forms,
   ufrmMain in 'ufrmMain.pas' {frmFido2},
   Fido2dll in '..\Fido2dll.pas',
