@@ -645,7 +645,7 @@ begin
                                                    TBaseFido2Credentials.WebAuthNObjDataToAuthData( authData ),
                                                    x5c, sig,
                                                    FidoServer.RequireResidentKey,
-                                                   authDataObj.UserVerified, 0, nil)  ;
+                                                   authDataObj.UserVerified, 0, nil, nil)  ;
              try
                 Result := credVerify.Verify(clientDataHash);
 
